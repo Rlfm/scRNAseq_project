@@ -2,6 +2,7 @@
 library(RCurl)
 library(tidyverse)
 library(Seurat)
+library(hdf5r)
 ```
 
 
@@ -20,16 +21,26 @@ data_dir <- working_dir |>
 dir.create(file.path(raw_data_dir))
 dir.create(file.path(data_dir))
 ```
-
-
 ```{r}
-#get filenames
-#https://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236902/suppl/GSE236902%5FDGE.mtx.gz
+#get filenames (metadata and genes)
+
 url = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236902/suppl/"
 filenames <- getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
 filenames <- strsplit(filenames, "\\n")
 filenames <- unlist(filenames)
 filenames
+
+```
+
+
+```{r}
+#get filenames 2 (count matrix)
+
+url = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236903/suppl/"
+filenames2 <- getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
+filenames2 <- strsplit(filenames, "\\n")
+filenames2 <- unlist(filenames)
+filenames2
 
 
 #https://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236903/suppl/GSE236903%5Ffiltered%5Ffeature%5Fbc%5Fmatrix.h5
@@ -39,54 +50,38 @@ filenames
 for (filename in filenames) {
   download.file(paste(url, filename, sep = ""), paste(raw_data_dir, "/", filename, sep = ""))
 }
+
+
+for (filename in filenames2) {
+  download.file(paste(url, filename, sep = ""), paste(raw_data_dir, "/", filename, sep = ""))
+}
 ```
 
 
 ```{r}
-#create seurat object
-matrix_file <- paste(raw_data_dir, "GSE236902_DGE.mtx.gz", sep = "/")
+#count matrix file name
+hdf5_file <- paste(raw_data_dir, "GSE236903_filtered_feature_bc_matrix.h5", sep = "/")
 features_file <- paste(raw_data_dir, "GSE236902_all_genes.csv.gz", sep = "/")
 cell_file <- paste(raw_data_dir, "GSE236902_cell_metadata.csv.gz", sep = "/")
-
-
-cell_object <- read_csv(cell_file)
-features_object <- read_csv(features_file)
-matrix_object <- Matrix::readMM(matrix_file)
-```
-
-
-```{r}
-# create expression matrix from files
-expression_matrix <- ReadMtx(
-  mtx = matrix_file, 
-  features = features_file,
-  cells = cell_file,
-  cell.sep = ",",
-  feature.sep = ",",
-  mtx.transpose = T,
-  unique.features = T,
-  skip.cell = 1,
-  skip.feature = 1
-)
-
-
-#removing unidentified genes
-to_remove <- which(rownames(expression_matrix) == "")
-expression_matrix <- expression_matrix[-grep("^\\.", row.names(expression_matrix)),]
-expression_matrix <- expression_matrix[-which(rownames(expression_matrix) == ""),]
-
-
-#create seurat object
-seurat_object <- CreateSeuratObject(counts = expression_matrix, meta.data = cell_object)
-
-#save seurat object 
-saveRDS(seurat_object, paste(data_dir, "retina.rds", sep = "/"))
 ```
 
 
 ```{r}
 #
-seurat_file <- paste(data_dir, "retina.rds", sep = "/")
+count_matrix <- Read10X_h5(hdf5_file, use.names = TRUE, unique.features = TRUE)
+cell_object <- read_csv(cell_file)
+features_object <- read_csv(features_file)
+
+
+seurat_object <- CreateSeuratObject(counts = count_matrix, meta.data = cell_object)
+
+saveRDS(seurat_object, paste(data_dir, "retina_2.rds", sep = "/"))
+```
+
+
+```{r}
+#
+seurat_file <- paste(data_dir, "retina_2.rds", sep = "/")
 retina <- readRDS(seurat_file)
 
 

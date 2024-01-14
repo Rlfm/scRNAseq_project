@@ -1,0 +1,99 @@
+---
+title: "preprocessing"
+format: html
+editor: visual
+---
+
+```{r}
+seurat_object_test <- readRDS("../data/retina.rds")
+```
+
+# Mitochondrial percentage
+
+```{r}
+seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT")
+```
+
+# First filtering
+
+```{r}
+seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10 & nCount_RNA < 15000)
+```
+
+# Doublets
+
+```{r}
+sce <- as.SingleCellExperiment(seurat_object_filtered)
+```
+
+```{r}
+library(scDblFinder)
+dbl.dens <- computeDoubletDensity(sce)
+```
+
+```{r}
+dbl.calls <- doubletThresholding(data.frame(score=dbl.dens),
+                                 method="griffiths", returnType="call")
+
+summary(dbl.calls)
+```
+
+```{r}
+seurat_object_filtered[["doublets"]] <- dbl.calls
+```
+
+```{r}
+seurat_object_filtered_2 <- subset(seurat_object_filtered, subset = doublets == "singlet")
+```
+
+# Cell scoring (does not work)
+
+```{r}
+#s.genes <- cc.genes$s.genes
+#g2m.genes <- cc.genes$g2m.genes
+#seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, #s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+```
+
+# Normalization
+
+```{r}
+seurat_object_filtered_2 <- NormalizeData(seurat_object_filtered_2, normalization.method = "LogNormalize", scale.factor = 10000, vars.to.regress = c("percent.mt"))
+```
+
+# SCT: does not work
+
+```{r}
+#seurat_object <- SCTransform(seurat_object, verbose = FALSE)
+```
+
+```{r}
+seurat_object_filtered_2 <- FindVariableFeatures(seurat_object_filtered_2, selection.method = "vst", nfeatures = 2000)
+```
+
+```{r}
+seurat_object_filtered_2 <- ScaleData(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
+#Run PCA 
+seurat_object_filtered_2 <- RunPCA(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
+ElbowPlot(seurat_object_filtered_2) 
+```
+
+```{r}
+seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:30)
+```
+
+
+```{r}
+DimPlot(seurat_object_filtered_2, group.by = "bc3_well")
+```
+
+```{r}
+FeaturePlot(seurat_object_filtered_2, 
+            reduction = "umap", 
+            features = "ASL1") 
+```
+
+```{r}
+#save seurat object 
+saveRDS(seurat_object, "../data/retina_preprocessed.rds")
+```
+
