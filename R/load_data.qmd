@@ -74,10 +74,11 @@ expression_matrix <- expression_matrix[-which(rownames(expression_matrix) == "")
 
 
 #create seurat object
-seurat_object <- CreateSeuratObject(counts = expression_matrix)
+seurat_object <- CreateSeuratObject(counts = expression_matrix, meta.data = cell_object)
 
 #save seurat object 
 saveRDS(seurat_object, paste(data_dir, "retina.rds", sep = "/"))
 ```
+
 
 
