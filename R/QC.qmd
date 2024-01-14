@@ -1,4 +1,10 @@
 ```{r}
+library(RCurl)
+library(tidyverse)
+library(Seurat)
+```
+
+```{r}
 # load data
 data_dir <- getwd() |>
   substr(1, nchar(working_dir)-2) |>

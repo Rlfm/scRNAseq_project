@@ -5,19 +5,45 @@ editor: visual
 ---
 
 ```{r}
-seurat_object_test <- readRDS("../data/retina.rds")
+seurat_object <- readRDS("../data/retina.rds")
 ```
 
 # Mitochondrial percentage
 
 ```{r}
 seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT")
+seurat_object[["percent.hb"]] <- PercentageFeatureSet(seurat_object, pattern = "^HB")
+seurat_object[["percent.rb"]] <- PercentageFeatureSet(seurat_object, pattern = "^RP[SL]")
+
+seurat_object@meta.data
+
+VlnPlot(seurat_object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.hb","percent.rb"), ncol = 5)
+
+ggplot(data.frame(seurat_object@meta.data), aes(x = seurat_object$nCount_RNA, y = seurat_object$nFeature_RNA)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Genes by molecules detected, unfiltered",
+       x = "nCount",
+       y = "Feature")
+
+
 ```
 
 # First filtering
 
 ```{r}
-seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10 & nCount_RNA < 15000)
+lower_lim <- quantile(seurat_object$nFeature_RNA,0.1)
+upper_lim <- 9000
+
+seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > lower_lim & nFeature_RNA < upper_lim & percent.mt < 10) # & nCount_RNA < 15000
+# Why nCount_RNA < 15000 ? What technical reality behind it ?
+
+ggplot(data.frame(seurat_object_filtered@meta.data), aes(x = seurat_object_filtered$nCount_RNA, y = seurat_object_filtered$nFeature_RNA)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Genes by molecules detected, filtered",
+       x = "nCount",
+       y = "Feature")
 ```
 
 # Doublets
@@ -32,8 +58,7 @@ dbl.dens <- computeDoubletDensity(sce)
 ```
 
 ```{r}
-dbl.calls <- doubletThresholding(data.frame(score=dbl.dens),
-                                 method="griffiths", returnType="call")
+dbl.calls <- doubletThresholding(data.frame(score=dbl.dens), method="griffiths", returnType="call")
 
 summary(dbl.calls)
 ```
@@ -72,6 +97,7 @@ seurat_object_filtered_2 <- FindVariableFeatures(seurat_object_filtered_2, selec
 
 ```{r}
 seurat_object_filtered_2 <- ScaleData(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
+
 #Run PCA 
 seurat_object_filtered_2 <- RunPCA(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
 ElbowPlot(seurat_object_filtered_2) 
@@ -80,7 +106,6 @@ ElbowPlot(seurat_object_filtered_2)
 ```{r}
 seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:30)
 ```
-
 
 ```{r}
 DimPlot(seurat_object_filtered_2, group.by = "bc3_well")
@@ -96,4 +121,3 @@ FeaturePlot(seurat_object_filtered_2,
 #save seurat object 
 saveRDS(seurat_object, "../data/retina_preprocessed.rds")
 ```
-
