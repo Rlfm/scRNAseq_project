@@ -36,12 +36,11 @@ filenames
 ```{r}
 #get filenames 2 (count matrix)
 
-url = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236903/suppl/"
-filenames2 <- getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
-filenames2 <- strsplit(filenames, "\\n")
-filenames2 <- unlist(filenames)
+url2 = "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236903/suppl/"
+filenames2 <- getURL(url2, ftp.use.epsv = FALSE, dirlistonly = TRUE)
+filenames2 <- strsplit(filenames2, "\\n")
+filenames2 <- unlist(filenames2)
 filenames2
-
 
 #https://ftp.ncbi.nlm.nih.gov/geo/series/GSE236nnn/GSE236903/suppl/GSE236903%5Ffiltered%5Ffeature%5Fbc%5Fmatrix.h5
 ```
@@ -51,9 +50,8 @@ for (filename in filenames) {
   download.file(paste(url, filename, sep = ""), paste(raw_data_dir, "/", filename, sep = ""))
 }
 
-
 for (filename in filenames2) {
-  download.file(paste(url, filename, sep = ""), paste(raw_data_dir, "/", filename, sep = ""))
+  download.file(paste(url2, filename, sep = ""), paste(raw_data_dir, "/", filename, sep = ""))
 }
 ```
 

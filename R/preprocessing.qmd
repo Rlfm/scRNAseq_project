@@ -38,12 +38,22 @@ upper_lim <- 9000
 seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > lower_lim & nFeature_RNA < upper_lim & percent.mt < 10) # & nCount_RNA < 15000
 # Why nCount_RNA < 15000 ? What technical reality behind it ?
 
-ggplot(data.frame(seurat_object_filtered@meta.data), aes(x = seurat_object_filtered$nCount_RNA, y = seurat_object_filtered$nFeature_RNA)) +
+ggplot(data.frame(seurat_object_filtered@meta.data), aes(x = seurat_object_filtered$nCount_RNA, y = seurat_object_filtered$nFeature_RNA)) + 
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
   labs(title = "Genes by molecules detected, filtered",
        x = "nCount",
        y = "Feature")
+
+par(mar = c(4, 8, 2, 1))
+C <- seurat_object_filtered@assays$RNA$counts
+C <- Matrix::t(Matrix::t(C)/Matrix::colSums(C)) * 100
+most_expressed <- order(apply(C, 1, median), decreasing = T)[20:1]
+
+selected_genes <- t(as.matrix(C[most_expressed, ]))
+
+boxplot(as.matrix(t(C[most_expressed, ])), cex = 0.1, las = 1, xlab = "% total count per cell",
+  col = (scales::hue_pal())(20)[20:1], horizontal = TRUE)
 ```
 
 # Doublets
@@ -55,28 +65,24 @@ sce <- as.SingleCellExperiment(seurat_object_filtered)
 ```{r}
 library(scDblFinder)
 dbl.dens <- computeDoubletDensity(sce)
-```
 
-```{r}
 dbl.calls <- doubletThresholding(data.frame(score=dbl.dens), method="griffiths", returnType="call")
 
 summary(dbl.calls)
-```
 
-```{r}
 seurat_object_filtered[["doublets"]] <- dbl.calls
-```
 
-```{r}
 seurat_object_filtered_2 <- subset(seurat_object_filtered, subset = doublets == "singlet")
 ```
 
 # Cell scoring (does not work)
 
 ```{r}
-#s.genes <- cc.genes$s.genes
-#g2m.genes <- cc.genes$g2m.genes
-#seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, #s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+
+seurat_object_filtered_2$diff_S_G2M <- seurat_object_filtered_2$S.Score - seurat_object_filtered_2$G2M.Score
 ```
 
 # Normalization
@@ -102,19 +108,28 @@ seurat_object_filtered_2 <- ScaleData(seurat_object_filtered_2, features = Varia
 seurat_object_filtered_2 <- RunPCA(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
 ElbowPlot(seurat_object_filtered_2) 
 ```
-
+# Unspervised Clustering + eval
 ```{r}
-seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:30)
+seurat_object_filtered_2 <- FindNeighbors(seurat_object_filtered_2, dims=1:15)
+seurat_object_filtered_2 <- FindClusters(seurat_object_filtered_2, resolution = c(0.2,0.5,0.7))
+
+library(clustree)
+clustree(seurat_object_filtered_2, prefix = "RNA_snn_res.")
+
 ```
 
+# UMAP and visualization
 ```{r}
+seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:15)
+
 DimPlot(seurat_object_filtered_2, group.by = "bc3_well")
 ```
 
 ```{r}
 FeaturePlot(seurat_object_filtered_2, 
             reduction = "umap", 
-            features = "ASL1") 
+            features = "ASL1",
+            label = TRUE) 
 ```
 
 ```{r}
