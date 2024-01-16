@@ -38,6 +38,8 @@ upper_lim <- 9000
 seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > lower_lim & nFeature_RNA < upper_lim & percent.mt < 10) # & nCount_RNA < 15000
 # Why nCount_RNA < 15000 ? What technical reality behind it ?
 
+#seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10, nCount_RNA < 15000)
+
 ggplot(data.frame(seurat_object_filtered@meta.data), aes(x = seurat_object_filtered$nCount_RNA, y = seurat_object_filtered$nFeature_RNA)) + 
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
@@ -75,6 +77,18 @@ seurat_object_filtered[["doublets"]] <- dbl.calls
 seurat_object_filtered_2 <- subset(seurat_object_filtered, subset = doublets == "singlet")
 ```
 
+# W genes
+
+```{r}
+W_genes_list <- c('Aliases','ATP5F1AW','CHD1W','CUPIN1B','ENS-1','HINTW','MBD2','MIR122-2','MIR122B-1','MIR122B-2','MIR7B','NEDD4L','NEDD4L','SKA1','SMAD4','SMAD7B','SPIN1L','ST8SIA3L','UBAP2L2','UBE2R2L','WPG')
+
+true_false <- W_genes_list %in% rownames(seurat_object)
+
+W_genes_list_filt <- W_genes_list[true_false]
+
+seurat_object[["percent.W"]] <- PercentageFeatureSet(seurat_object, features = W_genes_list_filt)
+```
+
 # Cell scoring (does not work)
 
 ```{r}
@@ -96,7 +110,7 @@ saveRDS(seurat_object, "../data/retina_preprocessed_tmp.rds")
 
 ```{r}
 seurat_object_filtered_2 <- SCTransform(
-  seurat_object_filtered_2, vars.to.regress = c("percent.mt"), ncells = 3000,
+  seurat_object_filtered_2, vars.to.regress = c("percent.mt","diff_S_G2M","percent.W"), ncells = 3000,
   conserve.memory = TRUE, verbose = TRUE
 )
 ```
@@ -136,3 +150,150 @@ FeaturePlot(seurat_object_filtered_2,
 #save seurat object 
 saveRDS(seurat_object, "../data/retina_preprocessed.rds")
 ```
+
+#################################################
+REPEAT FOR RETINA 2
+#################################################
+
+```{r}
+seurat_object <- readRDS("../data/retina_2.rds")
+```
+
+# Mitochondrial percentage
+
+```{r}
+seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT")
+seurat_object[["percent.hb"]] <- PercentageFeatureSet(seurat_object, pattern = "^HB")
+seurat_object[["percent.rb"]] <- PercentageFeatureSet(seurat_object, pattern = "^RP[SL]")
+
+seurat_object@meta.data
+
+VlnPlot(seurat_object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.hb","percent.rb"), ncol = 5)
+
+ggplot(data.frame(seurat_object@meta.data), aes(x = seurat_object$nCount_RNA, y = seurat_object$nFeature_RNA)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Genes by molecules detected, unfiltered",
+       x = "nCount",
+       y = "Feature")
+
+
+```
+
+# First filtering
+
+```{r}
+
+seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 15, nCount_RNA < 15000)
+
+ggplot(data.frame(seurat_object_filtered@meta.data), aes(x = seurat_object_filtered$nCount_RNA, y = seurat_object_filtered$nFeature_RNA)) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Genes by molecules detected, filtered",
+       x = "nCount",
+       y = "Feature")
+
+par(mar = c(4, 8, 2, 1))
+C <- seurat_object_filtered@assays$RNA$counts
+C <- Matrix::t(Matrix::t(C)/Matrix::colSums(C)) * 100
+most_expressed <- order(apply(C, 1, median), decreasing = T)[20:1]
+
+selected_genes <- t(as.matrix(C[most_expressed, ]))
+
+boxplot(as.matrix(t(C[most_expressed, ])), cex = 0.1, las = 1, xlab = "% total count per cell",
+  col = (scales::hue_pal())(20)[20:1], horizontal = TRUE)
+```
+
+# Doublets
+
+```{r}
+sce <- as.SingleCellExperiment(seurat_object_filtered)
+```
+
+```{r}
+library(scDblFinder)
+dbl.dens <- computeDoubletDensity(sce)
+
+dbl.calls <- doubletThresholding(data.frame(score=dbl.dens), method="griffiths", returnType="call")
+
+summary(dbl.calls)
+
+seurat_object_filtered[["doublets"]] <- dbl.calls
+
+seurat_object_filtered_2 <- subset(seurat_object_filtered, subset = doublets == "singlet")
+```
+
+# W genes
+
+```{r}
+W_genes_list <- c('Aliases','ATP5F1AW','CHD1W','CUPIN1B','ENS-1','HINTW','MBD2','MIR122-2','MIR122B-1','MIR122B-2','MIR7B','NEDD4L','NEDD4L','SKA1','SMAD4','SMAD7B','SPIN1L','ST8SIA3L','UBAP2L2','UBE2R2L','WPG')
+
+true_false <- W_genes_list %in% rownames(seurat_object)
+
+W_genes_list_filt <- W_genes_list[true_false]
+
+seurat_object[["percent.W"]] <- PercentageFeatureSet(seurat_object, features = W_genes_list_filt)
+```
+
+# Cell scoring (does not work)
+
+```{r}
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+
+seurat_object_filtered_2$diff_S_G2M <- seurat_object_filtered_2$S.Score - seurat_object_filtered_2$G2M.Score
+```
+
+# Normalization & Scaling via SCT
+
+```{r}
+# save seurat object temporarily because SCT might be unstable
+# (delete the file after preprocessing)
+saveRDS(seurat_object, "../data/retina_preprocessed_tmp.rds")
+#seurat_object_filtered_2 <- loadRDS("../data/retina_preprocessed_tmp.rds")
+```
+
+```{r}
+seurat_object_filtered_2 <- SCTransform(
+  seurat_object_filtered_2, vars.to.regress = c("percent.mt","diff_S_G2M","percent.W"), ncells = 3000,
+  conserve.memory = TRUE, verbose = TRUE
+)
+```
+
+# PCA
+
+```{r}
+#Run PCA 
+seurat_object_filtered_2 <- RunPCA(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
+ElbowPlot(seurat_object_filtered_2) 
+```
+# Unspervised Clustering + eval
+```{r}
+seurat_object_filtered_2 <- FindNeighbors(seurat_object_filtered_2, dims=1:15)
+seurat_object_filtered_2 <- FindClusters(seurat_object_filtered_2, resolution = c(0.2,0.5,0.7))
+
+library(clustree)
+clustree(seurat_object_filtered_2, prefix = "RNA_snn_res.")
+
+```
+
+# UMAP and visualization
+```{r}
+seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:15)
+
+DimPlot(seurat_object_filtered_2, group.by = "bc3_well")
+```
+
+```{r}
+FeaturePlot(seurat_object_filtered_2, 
+            reduction = "umap", 
+            features = "ASL1",
+            label = TRUE) 
+```
+
+```{r}
+#save seurat object 
+saveRDS(seurat_object, "../data/retina_2_preprocessed.rds")
+```
+
