@@ -1,0 +1,83 @@
+---
+title: "snATAC preprocessing"
+format: html
+editor: visual
+---
+
+# Directories 
+```{r}
+working_dir <- getwd()
+
+raw_data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("_raw", sep = "/")
+
+data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("data", sep = "/")
+
+```
+
+#Download gff3 Database 
+```{r}
+Db_path <- paste(raw_data_dir, "/", "Gallus_gallus.bGalGal1.mat.broiler.GRCg7b.111.gff3.gz", sep = "")
+url = "ftp://ftp.ensembl.org/pub/release-111/gff3/gallus_gallus/Gallus_gallus.bGalGal1.mat.broiler.GRCg7b.111.gff3.gz"
+download.file(url, Db_path)
+```
+
+
+# Load snATAC
+```{r}
+library(Signac)
+
+seurat_object <- readRDS("../data/retina_2.rds")
+
+chrom_assay <- CreateChromatinAssay(
+  counts = seurat_object@assays$RNA$counts.Peaks,
+  sep = c(":", "-"),
+  min.cells = 10,
+  min.features = 200
+)
+
+#metadata <- data.frame(seurat_object@meta.data) %>% select(-c(nCount_RNA,nFeature_RNA))
+
+snATAC_object <- CreateSeuratObject(
+  counts = chrom_assay,
+  assay = "peaks",
+  meta.data = seurat_object@meta.data
+)
+snATAC_object@meta.data
+
+```
+
+# Preprocessing snATAC
+```{r}
+#nuclei were retained which contained less than 40000 ATAC counts, greater than 1000 ATAC counts, 
+#nucleosomal signal less than 2, and TSS enrichment greater than 1."""
+
+#snATAC_object <- NucleosomeSignal(object = snATAC_object)
+#snATAC_object <- TSSEnrichment(object = snATAC_object)
+
+snATAC_object <- subset(snATAC_object, subset = nCount_peaks > 1000 & nCount_peaks < 4000)
+```
+
+#Create the gene activity matrix and add it to seurat object
+```{r}
+
+source("Custom_GreateGeneActivityMatrix.R")
+
+library(future)
+plan("multisession", workers = 8)
+options(future.globals.maxSize = 8000 * 1024^2)
+  
+activity_matrix <- CreateGeneActivityMatrix(snATAC_object@assays$peaks$counts,Db_path,c(1:39, "Z", "W"))
+snATAC_object[["ACTIVITY"]] <- CreateAssayObject((counts = activity_matrix))
+
+DefaultAssay(snATAC_object) <- "ACTIVITY"
+snATAC_object <- NormalizeData(snATAC_object)
+snATAC_object <- ScaleData(snATAC_object, features = rownames(snATAC_object))
+
+saveRDS(snATAC_object, paste(data_dir, "snATAC_retina_preprocessed.rds", sep = "/"))
+
+```
+

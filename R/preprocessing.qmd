@@ -6,6 +6,7 @@ editor: visual
 
 ```{r}
 seurat_object <- readRDS("../data/retina.rds")
+
 ```
 
 # Mitochondrial percentage
