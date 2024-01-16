@@ -7,13 +7,6 @@ editor: visual
 ## Load Dependencies
 
 ```{r}
-library(Seurat)
-library(scDblFinder)
-library(clustree)
-library(dplyr)
-library(tidyr)
-library(tibble)
-library(ggplot2)
 
 # visualization config
 options(bitmapType="cairo")
