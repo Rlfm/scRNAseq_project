@@ -246,7 +246,7 @@ true_false <- W_genes_list %in% rownames(seurat_object)
 
 W_genes_list_filt <- W_genes_list[true_false]
 
-seurat_object[["percent.W"]] <- PercentageFeatureSet(seurat_object, features = W_genes_list_filt)
+seurat_object_filtered_2[["percent.W"]] <- PercentageFeatureSet(seurat_object_filtered_2, features = W_genes_list_filt)
 ```
 
 # Cell scoring (does not work)
@@ -254,7 +254,16 @@ seurat_object[["percent.W"]] <- PercentageFeatureSet(seurat_object, features = W
 ```{r}
 s.genes <- cc.genes$s.genes
 g2m.genes <- cc.genes$g2m.genes
-seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+
+true_false <- s.genes %in% rownames(seurat_object)
+s.genes_filt <- s.genes[true_false]
+
+true_false <- g2m.genes %in% rownames(seurat_object)
+g2m.genes_filt <- g2m.genes[true_false]
+
+seurat_object_filtered_2 <- NormalizeData(seurat_object_filtered_2, normalization.method = "LogNormalize", scale.factor = 10000)
+
+seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, s.features = s.genes_filt, g2m.features = g2m.genes_filt, set.ident = TRUE)
 
 seurat_object_filtered_2$diff_S_G2M <- seurat_object_filtered_2$S.Score - seurat_object_filtered_2$G2M.Score
 ```
@@ -264,7 +273,7 @@ seurat_object_filtered_2$diff_S_G2M <- seurat_object_filtered_2$S.Score - seurat
 ```{r}
 # save seurat object temporarily because SCT might be unstable
 # (delete the file after preprocessing)
-saveRDS(seurat_object, "../data/retina_preprocessed_tmp.rds")
+saveRDS(seurat_object_filtered_2, "../data/retina_preprocessed_tmp.rds")
 #seurat_object_filtered_2 <- loadRDS("../data/retina_preprocessed_tmp.rds")
 ```
 
