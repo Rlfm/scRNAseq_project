@@ -50,8 +50,6 @@ cell_file <- paste(raw_data_dir, "GSE236902_cell_metadata.csv.gz", sep = "/")
 
 
 cell_object <- read_csv(cell_file)
-features_object <- read_csv(features_file)
-matrix_object <- Matrix::readMM(matrix_file)
 ```
 
 
@@ -68,7 +66,6 @@ expression_matrix <- ReadMtx(
   skip.cell = 1,
   skip.feature = 1
 )
-
 
 #removing unidentified genes
 to_remove <- which(rownames(expression_matrix) == "")
