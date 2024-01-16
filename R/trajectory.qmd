@@ -8,15 +8,34 @@ suppressPackageStartupMessages({
 })
 ```
 
+```{r}
+#load object
+seurat_ASL1 <- readRDS("../data/retina.preprocessed_ASL1.rds")
+```
+
+
 
 ```{r}
 #seurat_object_filtered_2 <- readRDS("../data/retina_preprocessed.rds")
 
-seurat_ASL1 <- subset(seurat_object_filtered_2, idents = "6")
-seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h", "E46hFGF"))
+#seurat_ASL1 <- subset(seurat_object_filtered_2, idents = "6")
+
+DimPlot(seurat_ASL1, reduction = "umap")
+
+FeaturePlot(seurat_ASL1, 
+            reduction = "umap", 
+            features = c("ASL1"),
+            order = TRUE,
+            label = TRUE)
+
+```
+
+
+```{r}
+#seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h", "E46hFGF"))
 
 #Run PCA
-seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 1000)
+seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 2000)
 
 #seurat_ASL1 <- ScaleData(seurat_ASL1, features = VariableFeatures(object = seurat_ASL1))
 seurat_ASL1 <- RunPCA(seurat_ASL1, features = VariableFeatures(object = seurat_ASL1))
@@ -27,21 +46,75 @@ ElbowPlot(seurat_ASL1)
 
 ```{r}
 #clustering
-seurat_ASL1 <- FindNeighbors(seurat_ASL1, dims = 1:8)
+seurat_ASL1 <- FindNeighbors(seurat_ASL1, dims = 1:10)
 seurat_ASL1 <- FindClusters(seurat_ASL1, resolution = c(0.2))
 
 
 Idents(seurat_ASL1) <- "SCT_snn_res.0.2"
 
 #Non linear dimentional reduction
-seurat_ASL1 <- RunUMAP(seurat_ASL1, dims = 1:8)
-DimPlot(seurat_ASL1, reduction = "umap", group.by = "sample")
+seurat_ASL1 <- RunUMAP(seurat_ASL1, dims = 1:10)
+DimPlot(seurat_ASL1, reduction = "umap", split = "sample")
 ```
+
+
+```{r}
+# #splitting between conditions
+seurat_ASL1_split <- SplitObject(seurat_ASL1, split.by = "sample")
+
+# normalize and identify variable features for each dataset independently
+seurat_ASL1_split <- lapply(X = seurat_ASL1_split, FUN = function(x) {
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+# select features that are repeatedly variable across datasets for integration run PCA on each dataset using these features
+features <- SelectIntegrationFeatures(object.list = seurat_ASL1_split)
+```
+
+
+```{r}
+# # integration
+library(future)
+plan("multisession", workers = 4)
+options(future.globals.maxSize = 8000 * 1024^2)
+
+#Identify anchors
+seurat_ASL1_anchors <- FindIntegrationAnchors(object.list = seurat_ASL1_split, anchor.features = features)
+
+#create an integrated data assay
+seurat_ASL1_combined <- IntegrateData(anchorset = seurat_ASL1_anchors)
+
+DefaultAssay(seurat_ASL1_combined) <- "integrated"
+
+plan("sequential")
+```
+
+```{r}
+# # Run the standard workflow for visualization and clustering
+seurat_ASL1_combined <- ScaleData(seurat_ASL1_combined, verbose = FALSE)
+seurat_ASL1_combined <- RunPCA(seurat_ASL1_combined, npcs = 30, verbose = FALSE)
+seurat_ASL1_combined <- RunUMAP(seurat_ASL1_combined, reduction = "pca", dims = 1:15)
+seurat_ASL1_combined <- FindNeighbors(seurat_ASL1_combined, reduction = "pca", dims = 1:15)
+seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.1)
+seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.2)
+seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.3)
+seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.4)
+seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.4)
+```
+
+```{r}
+Idents(seurat_ASL1_combined) <- "integrated_snn_res.0.2"
+DimPlot(seurat_ASL1_combined, reduction = "umap", split = "sample")
+
+```
+
+
 ```{r}
 #checking clusters
 FeaturePlot(seurat_ASL1, 
             reduction = "umap", 
-            features = c("ASL1"), 
+            features = c("ASL1"),
             order = TRUE,
             label = TRUE)
 ```
@@ -55,20 +128,28 @@ FeaturePlot(seurat_ASL1,
             order = TRUE,
             label = TRUE)
 ```
+
 ```{r}
 FeaturePlot(seurat_ASL1, 
             reduction = "umap", 
-            features = c("RELN", "MXRA5", "KIF13A", "MAST4"), 
+            features = c("RELN", "MXRA5", "KIF13A", "MAST4"),
             order = TRUE,
             label = TRUE)
+
+#features = c("RELN", "MXRA5", "KIF13A", "MAST4"),
 ```
+
+
 ```{r}
 FeaturePlot(seurat_ASL1, 
             reduction = "umap", 
-            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"), 
+            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
             order = TRUE,
             label = TRUE)
+#            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
 ```
+
+
 
 ```{r}
 #Slingshot
@@ -88,6 +169,7 @@ lineages <- getLineages(data = dimred,
 
 lineages
 ```
+
 ```{r}
 # Plot the lineages
 par(mfrow=c(1,2))
@@ -98,10 +180,13 @@ for(i in levels(clustering)){
 plot(dimred, col = pal[clustering],  pch = 16)
 lines(SlingshotDataSet(lineages), lwd = 3,  type = 'lineages', col = 'black')
 ```
+
+
 ```{r}
 curves <- getCurves(SlingshotDataSet(lineages), approx_points = 300, thresh = 0.01, stretch = 0.8, allow.breaks = FALSE, shrink = 0.99)
 curves
 ```
+
 
 ```{r}
 plot(dimred, col = pal[clustering], asp = 1, pch = 16)
@@ -120,7 +205,33 @@ set.seed(1)
 icMat <- evaluateK(counts = filt_counts, sds = curves, k = 3:20, 
                    nGenes = 54, verbose = T, plot = T)
 ```
-```{r}
 
+
+```{r}
+set.seed(1)
+pseudotime <- slingPseudotime(curves, na = FALSE)
+cellWeights <- slingCurveWeights(curves)
+sce <- fitGAM(counts = filt_counts, pseudotime = pseudotime, cellWeights = cellWeights,
+                 nknots = 9, verbose = FALSE)
+
+#Genes that change with pseudotime
+assoRes <- associationTest(sce)
+head(assoRes)
+```
+
+
+```{r}
+#Discovering progenitor marker genes
+startRes <- startVsEndTest(sce)
+
+#We can visualize estimated smoothers for the second most significant gene.
+oStart <- order(startRes$waldStat, decreasing = TRUE)
+sigGeneStart <- names(sce)[oStart[1]]
+#Which gene?
+sigGeneStart
+```
+
+```{r}
+plotSmoothers(sce, counts, gene = "MAF")
 ```
 
