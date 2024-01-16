@@ -1,0 +1,54 @@
+---
+title: "integration"
+format: html
+editor: visual
+---
+
+```{r}
+retina.scrna <- readRDS("../data/retina.preprocessed_ASL1.rds")
+```
+
+```{r}
+retina.scrna <- SCTransform(
+  retina.scrna, vars.to.regress = c("percent.mt","diff_S_G2M","percent.W"), ncells = 3000, conserve.memory = TRUE, verbose = TRUE)
+```
+
+
+```{r}
+retina.scrna <- RunPCA(retina.scrna, features = VariableFeatures(object = retina.scrna))
+retina.scrna <- FindNeighbors(retina.scrna, dims=1:15)
+retina.scrna <- FindClusters(retina.scrna, resolution = c(0.2))
+retina.scrna <- RunUMAP(retina.scrna, dims = 1:15)
+DimPlot(retina.scrna, group.by = "sample")
+```
+```{r}
+DimPlot(retina.scrna, group.by = "SCT_snn_res.0.2")
+```
+
+```{r}
+retina.scrna_sep <- SplitObject(retina.scrna, split.by = "sample")
+retina.scrna_sep <- PrepSCTIntegration(retina.scrna_sep, anchor.features = 2000)
+anchor_features <- SelectIntegrationFeatures(object.list = retina.scrna_sep)
+integration_anchors <- FindIntegrationAnchors(object.list = retina.scrna_sep, normalization.method = "SCT", anchor.features = anchor_features)
+retina.scrna.combined <- IntegrateData(anchorset = integration_anchors, k.weight = 58)
+DefaultAssay(retina.scrna.combined) <- "integrated"
+?IntegrateData
+```
+
+```{r}
+# Run the standard workflow for visualization and clustering
+retina.scrna.combined <- ScaleData(retina.scrna.combined, verbose = FALSE)
+retina.scrna.combined <- RunPCA(retina.scrna.combined, npcs = 30, verbose = FALSE)
+retina.scrna.combined <- RunUMAP(retina.scrna.combined, reduction = "pca", dims = 1:15)
+retina.scrna.combined <- FindNeighbors(retina.scrna.combined, reduction = "pca", dims = 1:15)
+retina.scrna.combined <- FindClusters(retina.scrna.combined, resolution = 0.2)
+```
+```{r}
+DimPlot(retina.scrna.combined, group.by = "sample")
+```
+
+```{r}
+DimPlot(retina.scrna.combined, group.by = "SCT_snn_res.0.2")
+```
+
+
