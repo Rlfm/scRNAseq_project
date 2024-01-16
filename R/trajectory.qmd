@@ -13,10 +13,10 @@ suppressPackageStartupMessages({
 #seurat_object_filtered_2 <- readRDS("../data/retina_preprocessed.rds")
 
 seurat_ASL1 <- subset(seurat_object_filtered_2, idents = "6")
-
+seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h", "E46hFGF"))
 
 #Run PCA
-seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 2000)
+seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 1000)
 
 #seurat_ASL1 <- ScaleData(seurat_ASL1, features = VariableFeatures(object = seurat_ASL1))
 seurat_ASL1 <- RunPCA(seurat_ASL1, features = VariableFeatures(object = seurat_ASL1))
@@ -27,15 +27,23 @@ ElbowPlot(seurat_ASL1)
 
 ```{r}
 #clustering
-seurat_ASL1 <- FindNeighbors(seurat_ASL1, dims = 1:10)
+seurat_ASL1 <- FindNeighbors(seurat_ASL1, dims = 1:8)
 seurat_ASL1 <- FindClusters(seurat_ASL1, resolution = c(0.2))
 
 
 Idents(seurat_ASL1) <- "SCT_snn_res.0.2"
 
 #Non linear dimentional reduction
-seurat_ASL1 <- RunUMAP(seurat_ASL1, dims = 1:10)
-DimPlot(seurat_ASL1, reduction = "umap")
+seurat_ASL1 <- RunUMAP(seurat_ASL1, dims = 1:8)
+DimPlot(seurat_ASL1, reduction = "umap", group.by = "sample")
+```
+```{r}
+#checking clusters
+FeaturePlot(seurat_ASL1, 
+            reduction = "umap", 
+            features = c("ASL1"), 
+            order = TRUE,
+            label = TRUE)
 ```
 
 
@@ -45,7 +53,6 @@ FeaturePlot(seurat_ASL1,
             reduction = "umap", 
             features = c("TGFB2", "TRPM1", "SLC7A2", "BNC2"), 
             order = TRUE,
-            min.cutoff = 'q10',
             label = TRUE)
 ```
 ```{r}
@@ -53,7 +60,6 @@ FeaturePlot(seurat_ASL1,
             reduction = "umap", 
             features = c("RELN", "MXRA5", "KIF13A", "MAST4"), 
             order = TRUE,
-            min.cutoff = 'q10',
             label = TRUE)
 ```
 ```{r}
@@ -61,6 +67,60 @@ FeaturePlot(seurat_ASL1,
             reduction = "umap", 
             features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"), 
             order = TRUE,
-            min.cutoff = 'q10',
             label = TRUE)
 ```
+
+```{r}
+#Slingshot
+pal <- c(RColorBrewer::brewer.pal(9, "Set1"), RColorBrewer::brewer.pal(8, "Set2"))
+
+# Save the objects as separate matrices for input in slingshot
+dimred <- seurat_ASL1@reductions$umap@cell.embeddings
+clustering <- seurat_ASL1$SCT_snn_res.0.2
+counts <- as.matrix(seurat_ASL1@assays$SCT@counts[seurat_ASL1@assays$SCT@var.features, ])
+
+#Run default Slingshot
+set.seed(1)
+lineages <- getLineages(data = dimred,
+                        clusterLabels = clustering,
+                        #end.clus = c("1","4","2"), #define how many branches/lineages to consider
+                        start.clus = "0") #define where to start the trajectories
+
+lineages
+```
+```{r}
+# Plot the lineages
+par(mfrow=c(1,2))
+plot(dimred[,1:2], col = pal[clustering],  cex=.5,pch = 16)
+for(i in levels(clustering)){ 
+  text( mean(dimred[clustering==i,1]),
+        mean(dimred[clustering==i,2]), labels = i,font = 2) }
+plot(dimred, col = pal[clustering],  pch = 16)
+lines(SlingshotDataSet(lineages), lwd = 3,  type = 'lineages', col = 'black')
+```
+```{r}
+curves <- getCurves(SlingshotDataSet(lineages), approx_points = 300, thresh = 0.01, stretch = 0.8, allow.breaks = FALSE, shrink = 0.99)
+curves
+```
+
+```{r}
+plot(dimred, col = pal[clustering], asp = 1, pch = 16)
+lines(SlingshotDataSet(curves), lwd = 3, col = "black")
+```
+
+
+```{r}
+# identifying temporally expressed genes
+dim(counts)
+filt_counts <- counts[rowSums(counts > 5) > ncol(counts)/100, ]
+dim(filt_counts)
+filt_counts <- as.matrix(filt_counts)
+
+set.seed(1)
+icMat <- evaluateK(counts = filt_counts, sds = curves, k = 3:20, 
+                   nGenes = 54, verbose = T, plot = T)
+```
+```{r}
+
+```
+
