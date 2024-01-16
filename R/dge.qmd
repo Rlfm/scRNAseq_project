@@ -23,6 +23,7 @@ data_dir <- working_dir |>
 
 
 ```{r}
+#load seurat object
 seurat_object <- readRDS()
 ```
 
