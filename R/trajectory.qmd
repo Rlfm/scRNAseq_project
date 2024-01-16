@@ -1,0 +1,66 @@
+```{r}
+library(Seurat)
+library(SingleCellExperiment)
+library(tradeSeq)
+library(dplyr)
+suppressPackageStartupMessages({
+  library(slingshot)
+})
+```
+
+
+```{r}
+#seurat_object_filtered_2 <- readRDS("../data/retina_preprocessed.rds")
+
+seurat_ASL1 <- subset(seurat_object_filtered_2, idents = "6")
+
+
+#Run PCA
+seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 2000)
+
+#seurat_ASL1 <- ScaleData(seurat_ASL1, features = VariableFeatures(object = seurat_ASL1))
+seurat_ASL1 <- RunPCA(seurat_ASL1, features = VariableFeatures(object = seurat_ASL1))
+ElbowPlot(seurat_ASL1) 
+
+```
+
+
+```{r}
+#clustering
+seurat_ASL1 <- FindNeighbors(seurat_ASL1, dims = 1:10)
+seurat_ASL1 <- FindClusters(seurat_ASL1, resolution = c(0.2))
+
+
+Idents(seurat_ASL1) <- "SCT_snn_res.0.2"
+
+#Non linear dimentional reduction
+seurat_ASL1 <- RunUMAP(seurat_ASL1, dims = 1:10)
+DimPlot(seurat_ASL1, reduction = "umap")
+```
+
+
+```{r}
+#checking clusters
+FeaturePlot(seurat_ASL1, 
+            reduction = "umap", 
+            features = c("TGFB2", "TRPM1", "SLC7A2", "BNC2"), 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+```
+```{r}
+FeaturePlot(seurat_ASL1, 
+            reduction = "umap", 
+            features = c("RELN", "MXRA5", "KIF13A", "MAST4"), 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+```
+```{r}
+FeaturePlot(seurat_ASL1, 
+            reduction = "umap", 
+            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"), 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+```

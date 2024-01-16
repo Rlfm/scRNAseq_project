@@ -1,79 +1,130 @@
 ---
-title: "preprocessing"
+title: "Preprocessing"
 format: html
 editor: visual
 ---
 
-```{r}
-seurat_object <- readRDS("../data/retina.rds")
+## Load Dependencies
 
+```{r}
+
+# visualization config
+options(bitmapType="cairo")
 ```
 
-# Mitochondrial percentage
+```{r}
+retina.scrna <- readRDS("../data/retina.rds")
+```
+
+# Adding Percentage of Overrepresented Genes
 
 ```{r}
-seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT")
-seurat_object[["percent.hb"]] <- PercentageFeatureSet(seurat_object, pattern = "^HB")
-seurat_object[["percent.rb"]] <- PercentageFeatureSet(seurat_object, pattern = "^RP[SL]")
+# mitochondrial
+retina.scrna[["percent.mt"]] <- PercentageFeatureSet(
+  retina.scrna, pattern = "^MT")
+retina.scrna[["percent.hb"]] <- PercentageFeatureSet(
+  retina.scrna, pattern = "^HB")
+# ribosomal proteins
+retina.scrna[["percent.rb"]] <- PercentageFeatureSet(
+  retina.scrna, pattern = "^RP[SL]")
 
-seurat_object@meta.data
+VlnPlot(
+  retina.scrna,
+  features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.hb",
+               "percent.rb"),
+  ncol = 5
+)
 
-VlnPlot(seurat_object, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.hb","percent.rb"), ncol = 5)
-
-ggplot(data.frame(seurat_object@meta.data), aes(x = seurat_object$nCount_RNA, y = seurat_object$nFeature_RNA)) +
+ggplot(
+  data.frame(retina.scrna@meta.data),
+  aes(x = retina.scrna$nCount_RNA, y = retina.scrna$nFeature_RNA)
+  ) +
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(title = "Genes by molecules detected, unfiltered",
-       x = "nCount",
-       y = "Feature")
-
-
+  labs(
+    title = "No. of Molecules detected per Gene (unfiltered)",
+    x = "No. of Counts",
+    y = "No. of Genes"
+  )
 ```
 
-# First filtering
+# Filtering
 
 ```{r}
-lower_lim <- quantile(seurat_object$nFeature_RNA,0.1)
+lower_lim <- quantile(retina.scrna$nFeature_RNA, 0.1)
 upper_lim <- 9000
 
-seurat_object_filtered <- subset(seurat_object, subset = nFeature_RNA > lower_lim & nFeature_RNA < upper_lim & percent.mt < 10) # & nCount_RNA < 15000
+retina.scrna.filtered <- subset(
+  retina.scrna,
+  subset = nFeature_RNA > lower_lim & nFeature_RNA < upper_lim & percent.mt < 10
+) # & nCount_RNA < 15000
 # Why nCount_RNA < 15000 ? What technical reality behind it ?
 
-ggplot(data.frame(seurat_object_filtered@meta.data), aes(x = seurat_object_filtered$nCount_RNA, y = seurat_object_filtered$nFeature_RNA)) + 
+#retina.scrna.filtered <- subset(retina.scrna, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10, nCount_RNA < 15000)
+
+ggplot(
+  data.frame(retina.scrna.filtered@meta.data),
+  aes(
+    x = retina.scrna.filtered$nCount_RNA,
+    y = retina.scrna.filtered$nFeature_RNA)
+  ) + 
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(title = "Genes by molecules detected, filtered",
-       x = "nCount",
-       y = "Feature")
+  labs(
+    title = "No. of Molecules detected per Gene (unfiltered)",
+    x = "No. of Counts",
+    y = "No. of Genes"
+  )
 
 par(mar = c(4, 8, 2, 1))
-C <- seurat_object_filtered@assays$RNA$counts
+C <- retina.scrna.filtered@assays$RNA$counts
 C <- Matrix::t(Matrix::t(C)/Matrix::colSums(C)) * 100
 most_expressed <- order(apply(C, 1, median), decreasing = T)[20:1]
 
 selected_genes <- t(as.matrix(C[most_expressed, ]))
 
-boxplot(as.matrix(t(C[most_expressed, ])), cex = 0.1, las = 1, xlab = "% total count per cell",
-  col = (scales::hue_pal())(20)[20:1], horizontal = TRUE)
+boxplot(
+  as.matrix(t(C[most_expressed, ])), 
+  cex = 0.1,
+  las = 1,
+  xlab = "% total count per cell",
+  col = (scales::hue_pal())(20)[20:1],
+  horizontal = TRUE
+)
 ```
 
-# Doublets
+# Doublet Removal
 
 ```{r}
-sce <- as.SingleCellExperiment(seurat_object_filtered)
-```
-
-```{r}
-library(scDblFinder)
+sce <- as.SingleCellExperiment(retina.scrna.filtered)
 dbl.dens <- computeDoubletDensity(sce)
+dbl.calls <- doubletThresholding(
+  data.frame(score=dbl.dens), 
+  method="griffiths", 
+  returnType="call"
+)
+#summary(dbl.calls)
 
-dbl.calls <- doubletThresholding(data.frame(score=dbl.dens), method="griffiths", returnType="call")
+retina.scrna.filtered[["doublets"]] <- dbl.calls
+retina.scrna.no_dbl <- subset(
+  retina.scrna.filtered, subset = doublets == "singlet")
+```
 
-summary(dbl.calls)
+# W-Chromosomal Genes
 
-seurat_object_filtered[["doublets"]] <- dbl.calls
+```{r}
+W_genes_list <- c(
+  'Aliases','ATP5F1AW','CHD1W','CUPIN1B','ENS-1','HINTW','MBD2','MIR122-2',
+  'MIR122B-1','MIR122B-2','MIR7B','NEDD4L','NEDD4L','SKA1','SMAD4','SMAD7B',
+  'SPIN1L','ST8SIA3L','UBAP2L2','UBE2R2L','WPG'
+)
 
-seurat_object_filtered_2 <- subset(seurat_object_filtered, subset = doublets == "singlet")
+true_false <- W_genes_list %in% rownames(retina.scrna)
+
+W_genes_list_filt <- W_genes_list[true_false]
+
+retina.scrna.no_dbl[["percent.W"]] <- PercentageFeatureSet(
+  retina.scrna.no_dbl, features = W_genes_list_filt)
 ```
 
 # Cell scoring (does not work)
@@ -81,59 +132,94 @@ seurat_object_filtered_2 <- subset(seurat_object_filtered, subset = doublets == 
 ```{r}
 s.genes <- cc.genes$s.genes
 g2m.genes <- cc.genes$g2m.genes
-seurat_object_filtered_2 <- CellCycleScoring(seurat_object_filtered_2, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
 
-seurat_object_filtered_2$diff_S_G2M <- seurat_object_filtered_2$S.Score - seurat_object_filtered_2$G2M.Score
+true_false <- s.genes %in% rownames(retina.scrna)
+s.genes_filt <- s.genes[true_false]
+
+true_false <- g2m.genes %in% rownames(retina.scrna)
+g2m.genes_filt <- g2m.genes[true_false]
+
+# normalize first to create 'data' layer
+retina.scrna.no_dbl <- NormalizeData(
+  retina.scrna.no_dbl,
+  normalization.method = "LogNormalize",
+  scale.factor = 10000
+)
+
+retina.scrna.no_dbl <- CellCycleScoring(
+  retina.scrna.no_dbl,
+  s.features = s.genes_filt,
+  g2m.features = g2m.genes_filt,
+  set.ident = TRUE
+)
+
+retina.scrna.no_dbl$diff_S_G2M <- retina.scrna.no_dbl$S.Score - retina.scrna.no_dbl$G2M.Score
 ```
 
-# Normalization
+# Normalization & Scaling via SCT
 
 ```{r}
-seurat_object_filtered_2 <- NormalizeData(seurat_object_filtered_2, normalization.method = "LogNormalize", scale.factor = 10000, vars.to.regress = c("percent.mt"))
-```
-
-# SCT: does not work
-
-```{r}
-#seurat_object <- SCTransform(seurat_object, verbose = FALSE)
+# save seurat object temporarily because SCT might be unstable
+# (delete the file after preprocessing)
+#saveRDS(retina.scrna.no_dbl, "../data/retina_preprocessed_tmp.rds")
+#retina.scrna.no_dbl <- readRDS("../data/retina_preprocessed_tmp.rds")
 ```
 
 ```{r}
-seurat_object_filtered_2 <- FindVariableFeatures(seurat_object_filtered_2, selection.method = "vst", nfeatures = 2000)
+retina.scrna.no_dbl <- SCTransform(
+  retina.scrna.no_dbl,
+  vars.to.regress = c("percent.mt", "diff_S_G2M", "percent.W"),
+  ncells = 3000,
+  conserve.memory = TRUE,
+  verbose = TRUE
+)
 ```
 
-```{r}
-seurat_object_filtered_2 <- ScaleData(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
+# PCA
 
+```{r}
 #Run PCA 
-seurat_object_filtered_2 <- RunPCA(seurat_object_filtered_2, features = VariableFeatures(object = seurat_object_filtered_2))
-ElbowPlot(seurat_object_filtered_2) 
-```
-# Unspervised Clustering + eval
-```{r}
-seurat_object_filtered_2 <- FindNeighbors(seurat_object_filtered_2, dims=1:15)
-seurat_object_filtered_2 <- FindClusters(seurat_object_filtered_2, resolution = c(0.2,0.5,0.7))
-
-library(clustree)
-clustree(seurat_object_filtered_2, prefix = "RNA_snn_res.")
-
+retina.scrna.no_dbl <- RunPCA(retina.scrna.no_dbl)
+ElbowPlot(retina.scrna.no_dbl)
 ```
 
-# UMAP and visualization
-```{r}
-seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:15)
+# Unsupervised Clustering & Evaluation
 
-DimPlot(seurat_object_filtered_2, group.by = "bc3_well")
+```{r}
+retina.scrna.no_dbl <- FindNeighbors(retina.scrna.no_dbl, dims=1:18)
+retina.scrna.no_dbl <- FindClusters(
+  retina.scrna.no_dbl, resolution = seq(0.1, 0.5, 0.1))
+
+clustree(retina.scrna.no_dbl, prefix = "SCT_snn_res.")
 ```
 
+# Dim. Reduction via UMAP
+
 ```{r}
-FeaturePlot(seurat_object_filtered_2, 
-            reduction = "umap", 
-            features = "ASL1",
-            label = TRUE) 
+retina.scrna.no_dbl <- RunUMAP(retina.scrna.no_dbl, dims = 1:18)
 ```
 
 ```{r}
-#save seurat object 
-saveRDS(seurat_object, "../data/retina_preprocessed.rds")
+# change identities to best cluster resolution
+Idents(retina.scrna.no_dbl) <- "SCT_snn_res.0.3"
+```
+
+```{r}
+DimPlot(retina.scrna.no_dbl, group.by = "bc3_well")
+```
+
+```{r}
+# visualize clusters expressing a nuclear marker
+FeaturePlot(
+  retina.scrna.no_dbl, 
+  reduction = "umap", 
+  features = "ASL1",
+  label = TRUE
+) 
+```
+
+# Save Results
+
+```{r}
+saveRDS(retina.scrna.no_dbl, "../data/retina.preprocessed.rds")
 ```
