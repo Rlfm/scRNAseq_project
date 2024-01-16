@@ -1,0 +1,41 @@
+---
+title: "snATAC preprocessing"
+format: html
+editor: visual
+---
+
+# Directories 
+```{r}
+working_dir <- getwd()
+
+raw_data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("_raw", sep = "/")
+
+data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("data", sep = "/")
+
+```
+
+# Load datasets
+```{r}
+library(Signac)
+
+snRNA_object <- readRDS("../data/retina.preprocessed.rds")
+snATAC_object <- readRDS("../data/snATAC_retina_preprocessed.rds")
+
+snRNA_object@meta.data 
+snATAC_object@meta.data
+```
+
+# Find anchors 
+```{r}
+
+library(future)
+plan("multisession", workers = 8)
+options(future.globals.maxSize = 8000 * 1024^2)
+
+transfer.anchors <- FindTransferAnchors(reference = snRNA_object, query = snATAC_object, features = VariableFeatures(object = snRNA_object),
+    reference.assay = "RNA", query.assay = "ACTIVITY", reduction = "cca")
+```

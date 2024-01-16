@@ -39,12 +39,12 @@ chrom_assay <- CreateChromatinAssay(
   min.features = 200
 )
 
-#metadata <- data.frame(seurat_object@meta.data) %>% select(-c(nCount_RNA,nFeature_RNA))
+metadata <- data.frame(seurat_object@meta.data) %>% dplyr::select(-c(nCount_RNA,nFeature_RNA))
 
 snATAC_object <- CreateSeuratObject(
   counts = chrom_assay,
   assay = "peaks",
-  meta.data = seurat_object@meta.data
+  meta.data = metadata
 )
 snATAC_object@meta.data
 
@@ -72,11 +72,28 @@ options(future.globals.maxSize = 8000 * 1024^2)
   
 activity_matrix <- CreateGeneActivityMatrix(snATAC_object@assays$peaks$counts,Db_path,c(1:39, "Z", "W"))
 snATAC_object[["ACTIVITY"]] <- CreateAssayObject((counts = activity_matrix))
+plan("sequential")
 
 DefaultAssay(snATAC_object) <- "ACTIVITY"
 snATAC_object <- NormalizeData(snATAC_object)
 snATAC_object <- ScaleData(snATAC_object, features = rownames(snATAC_object))
+```
 
+#Normalization and vizualisation
+```{r}
+
+snATAC_object <- RunTFIDF(snATAC_object)
+snATAC_object <- FindTopFeatures(snATAC_object, min.cutoff = "q0")
+snATAC_object <- RunSVD(snATAC_object)
+
+snATAC_object <- RunUMAP(snATAC_object, reduction = "lsi", dims = 2:35, reduction.name = "umap.atac", reduction.key = "atacUMAP_")
+
+DimPlot(snATAC_object, label = TRUE) + NoLegend() + ggtitle("ATAC")
+
+```
+
+#Saving preprocessed snATAC file
+```{r}
 saveRDS(snATAC_object, paste(data_dir, "snATAC_retina_preprocessed.rds", sep = "/"))
 
 ```
