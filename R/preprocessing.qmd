@@ -228,6 +228,6 @@ retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, subset = idents == "6")
 ```
 
 ```{r}
-saveRDS(retina.scrna.no_dbl, "../data/retina.preprocessed_ASL1.rds")
+saveRDS(retina.scrna.no_dbl_ASL1, "../data/retina.preprocessed_ASL1.rds")
 ```
 
