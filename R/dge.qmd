@@ -1,0 +1,28 @@
+```{r}
+library(Seurat)
+library(SingleCellExperiment)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tibble)
+library(fgsea)
+```
+
+```{r}
+#get directory strings
+working_dir <- getwd()
+
+raw_data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("_raw", sep = "/")
+
+data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("data", sep = "/")
+```
+
+
+```{r}
+seurat_object <- readRDS()
+```
+
