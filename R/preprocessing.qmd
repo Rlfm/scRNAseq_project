@@ -120,8 +120,7 @@ saveRDS(seurat_object_filtered_2, "../data/retina_preprocessed_tmp.rds")
 ```{r}
 seurat_object_filtered_2 <- SCTransform(
   seurat_object_filtered_2, vars.to.regress = c("percent.mt","diff_S_G2M","percent.W"), ncells = 3000,
-  conserve.memory = TRUE, verbose = TRUE
-)
+  conserve.memory = TRUE, verbose = TRUE)
 ```
 
 # PCA
@@ -134,10 +133,10 @@ ElbowPlot(seurat_object_filtered_2)
 # Unspervised Clustering + eval
 ```{r}
 seurat_object_filtered_2 <- FindNeighbors(seurat_object_filtered_2, dims=1:15)
-seurat_object_filtered_2 <- FindClusters(seurat_object_filtered_2, resolution = c(0.2,0.5,0.7))
+seurat_object_filtered_2 <- FindClusters(seurat_object_filtered_2, resolution = c(0.1, 0.2 ,0.3, 0.4, 0.5))
 
 library(clustree)
-clustree(seurat_object_filtered_2, prefix = "RNA_snn_res.")
+clustree(seurat_object_filtered_2, prefix = "SCT_snn_res.")
 
 ```
 
@@ -145,10 +144,16 @@ clustree(seurat_object_filtered_2, prefix = "RNA_snn_res.")
 ```{r}
 seurat_object_filtered_2 <- RunUMAP(seurat_object_filtered_2, dims = 1:15)
 
-DimPlot(seurat_object_filtered_2, group.by = "bc3_well")
+DimPlot(seurat_object_filtered_2, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(seurat_object_filtered_2, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(seurat_object_filtered_2, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(seurat_object_filtered_2, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(seurat_object_filtered_2, group.by = "SCT_snn_res.0.5", label = TRUE)
 ```
 
 ```{r}
+Idents(seurat_object_filtered_2) <- "SCT_snn_res.0.2"
+
 FeaturePlot(seurat_object_filtered_2, 
             reduction = "umap", 
             features = "ASL1",
