@@ -6,7 +6,7 @@ editor: visual
 
 ```{r}
 library(Seurat)
-#library(clustree)
+library(clustree)
 library(dplyr)
 library(tidyr)
 library(tibble)
