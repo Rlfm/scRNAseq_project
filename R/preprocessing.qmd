@@ -7,6 +7,13 @@ editor: visual
 ## Load Dependencies
 
 ```{r}
+library(Seurat)
+library(scDblFinder)
+library(clustree)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
 
 # visualization config
 options(bitmapType="cairo")
@@ -224,7 +231,9 @@ saveRDS(retina.scrna.no_dbl, "../data/retina.preprocessed.rds")
 ```
 
 ```{r}
-retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, idents = "6")
+# check which cluster it is, since due to some randomness, the number might be
+# different
+retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, idents = "7")
 ```
 
 ```{r}
