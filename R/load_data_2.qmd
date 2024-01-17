@@ -59,17 +59,47 @@ for (filename in filenames2) {
 ```{r}
 #count matrix file name
 hdf5_file <- paste(raw_data_dir, "GSE236903_filtered_feature_bc_matrix.h5", sep = "/")
+matrix_file <- paste(raw_data_dir, "GSE236902_DGE.mtx.gz", sep = "/")
 features_file <- paste(raw_data_dir, "GSE236902_all_genes.csv.gz", sep = "/")
 cell_file <- paste(raw_data_dir, "GSE236902_cell_metadata.csv.gz", sep = "/")
 ```
 
 
 ```{r}
-#
+## FIRST OBJECT (NO ATAC)
+# create expression matrix from files
+expression_matrix <- ReadMtx(
+  mtx = matrix_file, 
+  features = features_file,
+  cells = cell_file,
+  cell.sep = ",",
+  feature.sep = ",",
+  mtx.transpose = T,
+  unique.features = T,
+  skip.cell = 1,
+  skip.feature = 1
+)
+
+#removing unidentified genes
+to_remove <- which(rownames(expression_matrix) == "")
+expression_matrix <- expression_matrix[-grep("^\\.", row.names(expression_matrix)),]
+expression_matrix <- expression_matrix[-which(rownames(expression_matrix) == ""),]
+
+
+#create seurat object
+seurat_object <- CreateSeuratObject(counts = expression_matrix, meta.data = cell_object)
+
+#save seurat object 
+saveRDS(seurat_object, paste(data_dir, "retina.rds", sep = "/"))
+```
+
+
+
+```{r}
+## SECOND OBJECT (WITH ATAC)
+#get count matrix
 count_matrix <- Read10X_h5(hdf5_file, use.names = TRUE, unique.features = TRUE)
 cell_object <- read_csv(cell_file)
-features_object <- read_csv(features_file)
-
 
 seurat_object <- CreateSeuratObject(counts = count_matrix, meta.data = cell_object)
 
@@ -78,7 +108,7 @@ saveRDS(seurat_object, paste(data_dir, "retina_2.rds", sep = "/"))
 
 
 ```{r}
-#
+# Plot testing
 seurat_file <- paste(data_dir, "retina_2.rds", sep = "/")
 retina <- readRDS(seurat_file)
 

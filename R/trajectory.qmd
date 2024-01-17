@@ -10,9 +10,13 @@ suppressPackageStartupMessages({
 
 ```{r}
 #load object
+seurat_object <- readRDS("../data/retina.preprocessed.rds")
 seurat_ASL1 <- readRDS("../data/retina.preprocessed_ASL1.rds")
 ```
 
+```{r}
+DimPlot(seurat_object, reduction = "umap", split.by = "sample")
+```
 
 
 ```{r}
@@ -32,7 +36,7 @@ FeaturePlot(seurat_ASL1,
 
 
 ```{r}
-#seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h", "E46hFGF"))
+seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h", "E46hFGF"))
 
 #Run PCA
 seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 2000)
@@ -148,6 +152,14 @@ FeaturePlot(seurat_ASL1,
             label = TRUE)
 #            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
 ```
+```{r}
+FeaturePlot(seurat_ASL1, 
+            reduction = "umap", 
+            features = c("MAF"),
+            split.by = "sample",
+            order = TRUE,
+            label = TRUE)
+```
 
 
 
@@ -212,7 +224,7 @@ set.seed(1)
 pseudotime <- slingPseudotime(curves, na = FALSE)
 cellWeights <- slingCurveWeights(curves)
 sce <- fitGAM(counts = filt_counts, pseudotime = pseudotime, cellWeights = cellWeights,
-                 nknots = 9, verbose = FALSE)
+                 nknots = 6, verbose = FALSE)
 
 #Genes that change with pseudotime
 assoRes <- associationTest(sce)
