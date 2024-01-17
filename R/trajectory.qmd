@@ -6,16 +6,29 @@ library(dplyr)
 suppressPackageStartupMessages({
   library(slingshot)
 })
+library(future)
 ```
 
 ```{r}
 #load object
 seurat_object <- readRDS("../data/retina.preprocessed.rds")
 seurat_ASL1 <- readRDS("../data/retina.preprocessed_ASL1.rds")
+
+seurat_ASL1@meta.data <- seurat_ASL1@meta.data |> 
+  mutate(
+    embryo = str_sub(sample, 1, 2),
+    timepoint = case_when(
+      grepl("RPE", sample) ~ "0h",
+      grepl("6h", sample) ~ "6h",
+      grepl("24h", sample) ~ "24h"
+    ),
+    condition = if_else(grepl("FGF", sample), "sti", "ctl")
+  )
+
 ```
 
 ```{r}
-DimPlot(seurat_object, reduction = "umap", split.by = "sample")
+DimPlot(seurat_ASL1, reduction = "umap", split.by = "condition")
 ```
 
 
@@ -36,7 +49,7 @@ FeaturePlot(seurat_ASL1,
 
 
 ```{r}
-seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h", "E46hFGF"))
+seurat_ASL1 <- subset(seurat_ASL1, sample %in% c("E46h"))
 
 #Run PCA
 seurat_ASL1 <- FindVariableFeatures(seurat_ASL1, selection.method = "vst", nfeatures = 2000)
@@ -64,7 +77,7 @@ DimPlot(seurat_ASL1, reduction = "umap", split = "sample")
 
 ```{r}
 # #splitting between conditions
-seurat_ASL1_split <- SplitObject(seurat_ASL1, split.by = "sample")
+seurat_ASL1_split <- SplitObject(seurat_ASL1, split.by = "condition")
 
 # normalize and identify variable features for each dataset independently
 seurat_ASL1_split <- lapply(X = seurat_ASL1_split, FUN = function(x) {
@@ -79,7 +92,6 @@ features <- SelectIntegrationFeatures(object.list = seurat_ASL1_split)
 
 ```{r}
 # # integration
-library(future)
 plan("multisession", workers = 4)
 options(future.globals.maxSize = 8000 * 1024^2)
 
@@ -108,15 +120,15 @@ seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.4)
 ```
 
 ```{r}
-Idents(seurat_ASL1_combined) <- "integrated_snn_res.0.2"
-DimPlot(seurat_ASL1_combined, reduction = "umap", split = "sample")
+Idents(seurat_ASL1_combined) <- "integrated_snn_res.0.1"
+DimPlot(seurat_ASL1_combined, reduction = "umap")
 
 ```
 
 
 ```{r}
 #checking clusters
-FeaturePlot(seurat_ASL1, 
+FeaturePlot(seurat_ASL1_combined, 
             reduction = "umap", 
             features = c("ASL1"),
             order = TRUE,
@@ -126,7 +138,7 @@ FeaturePlot(seurat_ASL1,
 
 ```{r}
 #checking clusters
-FeaturePlot(seurat_ASL1, 
+FeaturePlot(seurat_ASL1_combined, 
             reduction = "umap", 
             features = c("TGFB2", "TRPM1", "SLC7A2", "BNC2"), 
             order = TRUE,
@@ -134,7 +146,7 @@ FeaturePlot(seurat_ASL1,
 ```
 
 ```{r}
-FeaturePlot(seurat_ASL1, 
+FeaturePlot(seurat_ASL1_combined, 
             reduction = "umap", 
             features = c("RELN", "MXRA5", "KIF13A", "MAST4"),
             order = TRUE,
@@ -145,7 +157,7 @@ FeaturePlot(seurat_ASL1,
 
 
 ```{r}
-FeaturePlot(seurat_ASL1, 
+FeaturePlot(seurat_ASL1_combined, 
             reduction = "umap", 
             features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
             order = TRUE,
@@ -153,10 +165,9 @@ FeaturePlot(seurat_ASL1,
 #            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
 ```
 ```{r}
-FeaturePlot(seurat_ASL1, 
+FeaturePlot(seurat_ASL1_combined, 
             reduction = "umap", 
             features = c("MAF"),
-            split.by = "sample",
             order = TRUE,
             label = TRUE)
 ```
@@ -209,13 +220,11 @@ lines(SlingshotDataSet(curves), lwd = 3, col = "black")
 ```{r}
 # identifying temporally expressed genes
 dim(counts)
-filt_counts <- counts[rowSums(counts > 5) > ncol(counts)/100, ]
-dim(filt_counts)
-filt_counts <- as.matrix(filt_counts)
+
 
 set.seed(1)
-icMat <- evaluateK(counts = filt_counts, sds = curves, k = 3:20, 
-                   nGenes = 54, verbose = T, plot = T)
+icMat <- evaluateK(counts = counts, sds = curves, k = 3:10, 
+                   nGenes = 200, verbose = T, plot = T)
 ```
 
 
@@ -223,9 +232,12 @@ icMat <- evaluateK(counts = filt_counts, sds = curves, k = 3:20,
 set.seed(1)
 pseudotime <- slingPseudotime(curves, na = FALSE)
 cellWeights <- slingCurveWeights(curves)
-sce <- fitGAM(counts = filt_counts, pseudotime = pseudotime, cellWeights = cellWeights,
-                 nknots = 6, verbose = FALSE)
 
+plan("multisession", workers = 4)
+options(future.globals.maxSize = 8000 * 1024^2)
+sce <- fitGAM(counts = counts, pseudotime = pseudotime, cellWeights = cellWeights,
+                 nknots = 6, verbose = FALSE)
+plan("sequential")
 #Genes that change with pseudotime
 assoRes <- associationTest(sce)
 head(assoRes)
@@ -238,12 +250,13 @@ startRes <- startVsEndTest(sce)
 
 #We can visualize estimated smoothers for the second most significant gene.
 oStart <- order(startRes$waldStat, decreasing = TRUE)
-sigGeneStart <- names(sce)[oStart[1]]
+sigGeneStart <- names(sce)[oStart[3]]
 #Which gene?
 sigGeneStart
 ```
 
 ```{r}
-plotSmoothers(sce, counts, gene = "MAF")
+plotSmoothers(sce, counts, gene = sigGeneStart)
+plotGeneCount(curves, counts, gene = "TRPM1")
 ```
 
