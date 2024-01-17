@@ -6,6 +6,17 @@ editor: visual
 
 ```{r}
 retina.scrna <- readRDS("../data/retina.preprocessed_ASL1.rds")
+
+retina.scrna@meta.data <- retina.scrna@meta.data |> 
+  mutate(
+    embryo = str_sub(sample, 1, 2),
+    timepoint = case_when(
+      grepl("RPE", sample) ~ "0h",
+      grepl("6h", sample) ~ "6h",
+      grepl("24h", sample) ~ "24h"
+    ),
+    condition = if_else(grepl("FGF", sample), "sti", "ctl")
+  )
 ```
 
 ```{r}
@@ -14,25 +25,28 @@ retina.scrna <- SCTransform(
 ```
 
 
+
+
 ```{r}
 retina.scrna <- RunPCA(retina.scrna, features = VariableFeatures(object = retina.scrna))
 retina.scrna <- FindNeighbors(retina.scrna, dims=1:15)
 retina.scrna <- FindClusters(retina.scrna, resolution = c(0.2))
 retina.scrna <- RunUMAP(retina.scrna, dims = 1:15)
-DimPlot(retina.scrna, group.by = "sample")
+
+
+DimPlot(retina.scrna, group.by = "condition")
 ```
 ```{r}
 DimPlot(retina.scrna, group.by = "SCT_snn_res.0.2")
 ```
 
 ```{r}
-retina.scrna_sep <- SplitObject(retina.scrna, split.by = "sample")
+retina.scrna_sep <- SplitObject(retina.scrna, split.by = "condition")
 retina.scrna_sep <- PrepSCTIntegration(retina.scrna_sep, anchor.features = 2000)
 anchor_features <- SelectIntegrationFeatures(object.list = retina.scrna_sep)
 integration_anchors <- FindIntegrationAnchors(object.list = retina.scrna_sep, normalization.method = "SCT", anchor.features = anchor_features)
 retina.scrna.combined <- IntegrateData(anchorset = integration_anchors, k.weight = 58)
 DefaultAssay(retina.scrna.combined) <- "integrated"
-?IntegrateData
 ```
 
 ```{r}
@@ -43,12 +57,16 @@ retina.scrna.combined <- RunUMAP(retina.scrna.combined, reduction = "pca", dims 
 retina.scrna.combined <- FindNeighbors(retina.scrna.combined, reduction = "pca", dims = 1:15)
 retina.scrna.combined <- FindClusters(retina.scrna.combined, resolution = 0.2)
 ```
+
 ```{r}
-DimPlot(retina.scrna.combined, group.by = "sample")
+DimPlot(retina.scrna.combined, group.by = "condition")
 ```
 
 ```{r}
 DimPlot(retina.scrna.combined, group.by = "SCT_snn_res.0.2")
 ```
 
+```{r}
+saveRDS(retina.scrna.combined, "../data/retina.integrated.ASL1.rds")
+```
 
