@@ -1,0 +1,333 @@
+---
+title: "DGE & GSEA"
+format: html
+editor: visual
+---
+
+# Load Dependencies
+
+```{r}
+library(Seurat)
+library(SingleCellExperiment)
+library(DCATS)
+library(DESeq2)
+library(fgsea)
+library(clustree)
+library(BaseSet)    # <--- needs to be installed
+library(RCurl)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(stringr)
+library(pheatmap)
+
+# visualization config
+options(bitmapType="cairo")
+```
+
+
+```{r}
+retina.scrna <- readRDS("../data/retina.integrated.ASL1.rds")
+# only keep RNA layer
+DefaultAssay(retina.scrna) <- "RNA"
+retina.scrna@assays$SCT <- NULL
+retina.scrna@assays$integrated <- NULL
+# join layers to make some Seurat functionalities work
+retina.scrna <- JoinLayers(retina.scrna)
+```
+
+# 1. Cell Type Annotation
+
+## Visualize Clustering based on Conditions
+
+```{r}
+plot1 <- DimPlot(retina.scrna, reduction = "umap", group.by = "embryo")
+plot2 <- DimPlot(retina.scrna, reduction = "umap", group.by = "timepoint")
+plot3 <- DimPlot(retina.scrna, reduction = "umap", group.by = "condition")
+
+plot1|plot2|plot3
+```
+
+```{r}
+DimPlot(retina.scrna, group.by = "integrated_snn_res.0.12")
+Idents(retina.scrna) <- "integrated_snn_res.0.12"
+```
+
+## Find Conserved Markers
+
+```{r}
+cluster_i <- "4"
+
+cluster.conserved_markers <- FindConservedMarkers(
+  retina.scrna,
+  ident.1 = cluster_i,
+  grouping.var = "condition",
+  only.pos = TRUE,
+  min.pct = 0.25,
+  min.diff.pct = 0.25,
+  logfc.threshold = 0.25
+)
+```
+
+## Assign Clusters to Cell Types
+
+```{r}
+# epithelial: SLC7A2 and BNC2
+# intermediate: RELN, MAST4, and KIF13A
+# fiber: WNT5N, JARID2, and ST6GALNAC3
+retina.scrna <- RenameIdents(
+  object = retina.scrna,
+  "0" = "epithelial",
+  "1" = "fiber",
+  "2" = "intermediate",
+  "3" = "fiber",
+  "4" = "intermediate"
+)
+retina.scrna[["cell_type"]] <- Idents(retina.scrna)
+
+DimPlot(retina.scrna, group.by = "cell_type")
+```
+
+```{r}
+saveRDS(retina.scrna, "../data/retina.cell_assigned.ASL1.rds")
+```
+
+
+## Subset to Only Compare Cells at 0 and 6 h
+
+```{r}
+retina.scrna.sub <- subset(retina.scrna, timepoint %in% c("0h", "6h"))
+```
+
+
+# 2. Differential Cell Type Composition
+
+## Get Information
+
+```{r}
+# get similarity matrix
+knn.mat <- knn_simMat(
+  retina.scrna.sub@graphs$integrated_snn, retina.scrna.sub$cell_type)
+
+# get count matrix
+retina.scrna.sub$id <- paste0(
+  retina.scrna.sub$condition, "_", retina.scrna.sub$sample)
+count.mat <- table(retina.scrna.sub$sample, retina.scrna.sub$cell_type)
+```
+
+## Run DCATS and fit Model
+
+```{r}
+# create design matrix
+retina.cell_type.design <- data.frame(
+  status = c("1_ret", "1_ret", "0_heal", "1_ret", "0_heal"),
+  condition = c("0_none", "1_fgf", "0_none", "1_fgf", "0_none")
+)
+
+# fit model
+dcats.res <- dcats_GLM(count.mat, retina.cell_type.design, knn.mat)
+```
+
+
+# 3. Differential Gene Expression
+
+## Pseudo Bulking
+
+```{r}
+counts <- AggregateExpression(
+  retina.scrna.sub,
+  group.by = c("cell_type", "sample"),
+  assays = "RNA",
+  return.seurat = FALSE)
+counts <- counts$RNA
+counts.t <- as.data.frame(t(counts))
+
+split_rows <- gsub("_.*", "", rownames(counts.t))
+counts.split <- split.data.frame(counts.t, f = factor(split_rows))
+counts.split.mod <- lapply(
+  counts.split,
+  function (x) {
+    rownames(x) <- gsub(".*_(.*)", "\\1", rownames(x))
+    t(x)
+  }
+)
+```
+
+```{r}
+col_data <- data.frame(samples = colnames(counts.split.mod$fiber))
+col_data <- col_data |> 
+  mutate(
+    condition = case_when(
+      samples == "E46h" ~ "rect_none",
+      samples == "E46hFGF" ~ "rect_fgf",
+      samples == "E4RPE" ~ "ref",
+      samples == "E56hFGF" ~ "rect_fgf",
+      samples == "E5RPE" ~ "ref"
+    )
+  ) |> 
+  column_to_rownames(var = "samples")
+```
+
+## DESeq2
+
+```{r}
+retina.dds <- DESeqDataSetFromMatrix(
+  countData = counts.split.mod$fiber,
+  colData = col_data,
+  design = ~ condition
+)
+retina.dds$condition <- relevel(retina.dds$condition, ref = "ref")
+
+retina.dds <- DESeq(retina.dds)
+```
+
+```{r}
+# check dispersion fit
+plotDispEsts(retina.dds)
+```
+
+## Analyze Results
+
+```{r}
+# reference vs. retinectomy
+dds.results.ref_rect <- results(
+  retina.dds, contrast=c("condition", "ref", "rect_none")) |> 
+  as.data.frame() |> 
+  rownames_to_column(var = "gene") |> 
+  as_tibble() |> 
+  arrange(padj)
+
+dds.res.sig.ref_rect <- dds.results.ref_rect |> 
+  dplyr::filter(padj < 0.05) |> 
+  arrange(padj)
+
+# reference vs. FGF treatment
+dds.results.ref_fgf <- results(
+  retina.dds, contrast=c("condition", "ref", "rect_fgf")) |> 
+  as.data.frame() |> 
+  rownames_to_column(var = "gene") |> 
+  as_tibble() |> 
+  arrange(padj)
+
+dds.res.sig.ref_fgf <- dds.results.ref_fgf |> 
+  dplyr::filter(padj < 0.05) |> 
+  arrange(padj)
+
+# retinectomy vs. FGF treatment
+dds.results.rect_fgf <- results(
+  retina.dds, contrast=c("condition", "rect_none", "rect_fgf")) |> 
+  as.data.frame() |> 
+  rownames_to_column(var = "gene") |> 
+  as_tibble() |> 
+  arrange(padj)
+
+dds.res.sig.rect_fgf <- dds.results.rect_fgf |> 
+  dplyr::filter(padj < 0.05) |> 
+  arrange(padj)
+```
+
+## Get Normalized Counts for Comparison in Heatmap
+
+```{r}
+rld <- assay(rlog(retina.dds, blind=TRUE)) |> 
+  as.data.frame() |> 
+  rownames_to_column(var = "gene") |> 
+  filter(gene %in% c(
+    dds.res.sig.ref_rect$gene, 
+    dds.res.sig.ref_fgf$gene, 
+    dds.res.sig.rect_fgf$gene
+  )) |> 
+  column_to_rownames(var = "gene")
+```
+
+```{r}
+pheatmap(rld, annotation = col_data)
+```
+
+
+# 4. Gene Set Enrichment Analysis
+
+## Get the Gene Ontology
+
+```{r}
+# download file (maybe fix this)
+working_dir <- getwd()
+raw_data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("_raw", sep = "/")
+
+file_path <- "https://zenodo.org/records/8041638/files/wikipathways-20230610-gmt-Gallus_gallus.gmt?download=1"
+download.file(file_path, paste(raw_data_dir, "genesets_chicken.gmt", sep="/"))
+```
+
+```{r}
+# load the file
+chicken.pathways <- gmtPathways("../_raw/genesets_chicken.gmt")
+```
+
+```{r}
+# install genome annotation for Gallus gallus (chicken)
+#BiocManager::install("org.Gg.eg.db")
+```
+## Get the IDs For The Genes
+
+```{r}
+library(org.Gg.eg.db)
+entrez <- AnnotationDbi::select(
+  org.Gg.eg.db,
+  key=dds.results$gene,
+  columns="ENTREZID",
+  keytype="SYMBOL"
+) |> 
+  as_tibble()
+
+dds.results.entrez <- dds.res.sig.rect_fgf |> 
+  as.data.frame() |> 
+  inner_join(entrez, by=c("gene" = "SYMBOL"))
+```
+
+## Extract Relevant Information
+
+```{r}
+dds.results.entrez$stat.sig <- -log10(dds.results.entrez$padj) * 
+  sign(dds.results.entrez$log2FoldChange)
+
+dds.results.ranked <- dds.results.entrez |> 
+  dplyr::filter(if_all(-c(ENTREZID, stat.sig),  ~ !is.na(.)),)
+
+ranks <- dds.results.ranked$stat.sig
+names(ranks) <- dds.results.ranked$ENTREZID
+```
+
+## Running FGSEA
+
+```{r}
+fgsea.res <- fgsea(pathways = chicken.pathways, stats = ranks)
+```
+
+```{r}
+fgsea.res.tidy <- fgsea.res |> 
+  as_tibble() |> 
+  arrange(desc(NES))
+
+# get most and least enriched pathways
+top_10 <- fgsea.res.tidy |> 
+  arrange(desc(NES)) |> 
+  head(3)
+bottom_10 <- fgsea.res.tidy |> 
+  arrange(NES) |> 
+  head(3)
+
+top_bottom_10 <- rbind(top_10, bottom_10)
+ggplot(top_bottom_10, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill = padj < 0.05)) +
+  coord_flip() +
+  labs(
+    x = "Pathway",
+    y = "Normalized Enrichtment Score",
+    title = "Top/Bottom Hallmark Pathways based on abs. NES between Simple Retinectomy and FGF-Treatment"
+  ) +
+  theme_minimal()
+```
+
