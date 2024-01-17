@@ -55,11 +55,15 @@ retina.scrna.combined <- ScaleData(retina.scrna.combined, verbose = FALSE)
 retina.scrna.combined <- RunPCA(retina.scrna.combined, npcs = 30, verbose = FALSE)
 retina.scrna.combined <- RunUMAP(retina.scrna.combined, reduction = "pca", dims = 1:15)
 retina.scrna.combined <- FindNeighbors(retina.scrna.combined, reduction = "pca", dims = 1:15)
-retina.scrna.combined <- FindClusters(retina.scrna.combined, resolution = 0.2)
+retina.scrna.combined <- FindClusters(retina.scrna.combined, resolution = c(0.1, 0.12, 0.18, 0.2))
 ```
 
 ```{r}
 DimPlot(retina.scrna.combined, group.by = "condition")
+```
+
+```{r}
+DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.12")
 ```
 
 ```{r}
