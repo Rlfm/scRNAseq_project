@@ -20,7 +20,6 @@ set.seed(1)
 
 ```
 
-
 ```{r}
 retina.scrna <- readRDS("../data/retina.preprocessed_ASL1.rds")
 
@@ -35,18 +34,13 @@ retina.scrna@meta.data <- retina.scrna@meta.data |>
     condition = case_when(
       grepl("FGF", sample) ~ "fgf",
       grepl("RPE", sample) ~ "ref"
-    ) |> 
-    mutate(condition = if_else(is.na(condition), "rect", condition))
-  )
+    ), condition = if_else(is.na(condition), "rect", condition))
 ```
 
 ```{r}
 retina.scrna <- SCTransform(
   retina.scrna, vars.to.regress = c("percent.mt","diff_S_G2M","percent.W"), ncells = 3000, conserve.memory = TRUE, verbose = TRUE)
 ```
-
-
-
 
 ```{r}
 retina.scrna <- RunPCA(retina.scrna, features = VariableFeatures(object = retina.scrna))
@@ -57,6 +51,7 @@ retina.scrna <- RunUMAP(retina.scrna, dims = 1:15)
 
 DimPlot(retina.scrna, group.by = "condition")
 ```
+
 ```{r}
 DimPlot(retina.scrna, group.by = "SCT_snn_res.0.2")
 ```
@@ -76,7 +71,7 @@ retina.scrna.combined <- ScaleData(retina.scrna.combined, verbose = FALSE)
 retina.scrna.combined <- RunPCA(retina.scrna.combined, npcs = 30, verbose = FALSE)
 retina.scrna.combined <- RunUMAP(retina.scrna.combined, reduction = "pca", dims = 1:15)
 retina.scrna.combined <- FindNeighbors(retina.scrna.combined, reduction = "pca", dims = 1:15)
-retina.scrna.combined <- FindClusters(retina.scrna.combined, resolution = c(0.1, 0.12, 0.18, 0.2))
+retina.scrna.combined <- FindClusters(retina.scrna.combined, resolution = c(0.1, 0.12, 0.18, 0.2, 0.11, 0.105, 0.15))
 ```
 
 ```{r}
@@ -84,7 +79,7 @@ DimPlot(retina.scrna.combined, group.by = "condition")
 ```
 
 ```{r}
-DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.12")
+DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.15")
 ```
 
 ```{r}
@@ -94,4 +89,3 @@ DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.2")
 ```{r}
 saveRDS(retina.scrna.combined, "../data/retina.integrated.ASL1.rds")
 ```
-
