@@ -120,7 +120,7 @@ seurat_ASL1_combined <- FindClusters(seurat_ASL1_combined, resolution = 0.4)
 ```
 
 ```{r}
-Idents(seurat_ASL1_combined) <- "integrated_snn_res.0.1"
+Idents(seurat_ASL1_combined) <- "integrated_snn_res.0.2"
 DimPlot(seurat_ASL1_combined, reduction = "umap")
 
 ```

@@ -1,0 +1,203 @@
+```{r}
+library(Seurat)
+library(SingleCellExperiment)
+library(tradeSeq)
+library(dplyr)
+suppressPackageStartupMessages({
+  library(slingshot)
+})
+library(future)
+```
+
+```{r}
+#load object
+retina.integrated.ASL1 <- readRDS("../data/retina.integrated.ASL1.rds")
+```
+
+```{r}
+
+DimPlot(retina.integrated.ASL1, reduction = "umap", group.by = "integrated_snn_res.0.12")
+Idents(retina.integrated.ASL1) <- "integrated_snn_res.0.12"
+DefaultAssay(retina.integrated.ASL1) <- "SCT"
+```
+
+```{r}
+FeaturePlot(retina.integrated.ASL1, 
+            reduction = "umap", 
+            features = c("ASL1"),
+            split.by = "condition",
+            order = TRUE,
+            label = TRUE)
+
+```
+```{r}
+#Checking epithelial genes
+FeaturePlot(retina.integrated.ASL1, 
+            reduction = "umap", 
+            features = c("TGFB2", "TRPM1", "SLC7A2", "BNC2"),
+            min.cutoff = "q10",
+            order = TRUE,
+            label = TRUE)
+```
+
+
+```{r}
+#checking intermediate genes
+FeaturePlot(retina.integrated.ASL1, 
+            reduction = "umap", 
+            features = c("RELN", "MXRA5", "KIF13A", "MAST4"),
+            min.cutoff = "q10",
+            order = TRUE,
+            label = TRUE)
+```
+
+
+
+```{r}
+# checking fiber genes
+FeaturePlot(retina.integrated.ASL1, 
+            reduction = "umap", 
+            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
+            min.cutoff = "q10",
+            order = TRUE,
+            label = TRUE)
+#            features = c("CRYBA4", "WNT5B", "JARID2", "ST6GALNAC3"),
+```
+
+```{r}
+#MAF
+FeaturePlot(retina.integrated.ASL1, 
+            reduction = "umap", 
+            features = c("MAF"),
+            split.by = "condition",
+            min.cutoff = "q10",
+            order = TRUE,
+            label = TRUE)
+```
+
+
+
+```{r}
+#Slingshot
+pal <- c(RColorBrewer::brewer.pal(9, "Set1"), RColorBrewer::brewer.pal(8, "Set2"))
+
+# Save the objects as separate matrices for input in slingshot
+dimred <- retina.integrated.ASL1@reductions$umap@cell.embeddings
+clustering <- retina.integrated.ASL1$integrated_snn_res.0.12
+counts <- as.matrix(retina.integrated.ASL1@assays$SCT@counts[retina.integrated.ASL1@assays$integrated@var.features, ])
+
+#Run default Slingshot
+set.seed(1)
+lineages <- getLineages(data = dimred,
+                        clusterLabels = clustering,
+                        #end.clus = c("1","4","2"), #define how many branches/lineages to consider
+                        start.clus = "3") #define where to start the trajectories
+
+lineages
+```
+
+
+```{r}
+# Plot the lineages
+par(mfrow=c(1,2))
+plot(dimred[,1:2], col = pal[clustering],  cex=.5,pch = 16)
+for(i in levels(clustering)){ 
+  text( mean(dimred[clustering==i,1]),
+        mean(dimred[clustering==i,2]), labels = i,font = 2) }
+plot(dimred, col = pal[clustering],  pch = 16)
+lines(SlingshotDataSet(lineages), lwd = 3,  type = 'lineages', col = 'black')
+```
+
+
+
+
+
+```{r}
+curves <- getCurves(SlingshotDataSet(lineages), approx_points = 300, thresh = 0.01, stretch = 0.8, allow.breaks = FALSE, shrink = 0.99)
+curves
+```
+
+
+```{r}
+plot(dimred, col = pal[clustering], asp = 1, pch = 16)
+lines(SlingshotDataSet(curves), lwd = 3, col = "black")
+```
+
+```{r}
+# identifying temporally expressed genes
+dim(counts)
+
+
+set.seed(1)
+icMat <- evaluateK(counts = counts, sds = curves, k = 3:10, 
+                   nGenes = 50, verbose = T, plot = T)
+```
+
+
+
+```{r}
+#setting parallel options
+BPPARAM <- BiocParallel::bpparam()
+set.seed(1)
+pseudotime <- slingPseudotime(curves, na = FALSE)
+cellWeights <- slingCurveWeights(curves)
+
+BPPARAM$workers <- 8
+sce <- fitGAM(counts = counts, pseudotime = pseudotime, cellWeights = cellWeights,
+                 nknots = 5, verbose = FALSE)
+BPPARAM$workers <- 1
+
+#Genes that change with pseudotime
+assoRes <- associationTest(sce)
+head(assoRes)
+```
+
+
+
+```{r}
+#Discovering progenitor marker genes
+startRes <- startVsEndTest(sce)
+
+#We can visualize estimated smoothers for the second most significant gene.
+oStart <- order(startRes$waldStat, decreasing = TRUE)
+sigGeneStart <- names(sce)[oStart[1]]
+#Which gene?
+sigGeneStart
+```
+
+
+
+```{r}
+plotSmoothers(sce, counts, gene = "MAF")
+plotGeneCount(curves, counts, gene = "MAF")
+```
+
+
+
+
+
+
+```{r}
+# marker genes for the differentiated cell types
+endRes <- diffEndTest(sce)
+o <- order(endRes$waldStat, decreasing = TRUE)
+sigGene <- names(sce)[o[1]]
+plotSmoothers(sce, counts, sigGene)
+plotGeneCount(curves, counts, gene = sigGene)
+```
+
+
+
+```{r}
+# assessing the expression pattern of a gene over pseudotime
+patternRes <- patternTest(sce)
+oPat <- order(patternRes$waldStat, decreasing = TRUE)
+head(rownames(patternRes)[oPat])
+```
+
+```{r}
+plotSmoothers(sce, counts, gene = rownames(patternRes)[oPat][6])
+plotGeneCount(curves, counts, gene = rownames(patternRes)[oPat][6])
+
+```
+
