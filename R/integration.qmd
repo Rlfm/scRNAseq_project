@@ -32,7 +32,11 @@ retina.scrna@meta.data <- retina.scrna@meta.data |>
       grepl("6h", sample) ~ "6h",
       grepl("24h", sample) ~ "24h"
     ),
-    condition = if_else(grepl("FGF", sample), "sti", "ctl")
+    condition = case_when(
+      grepl("FGF", sample) ~ "fgf",
+      grepl("RPE", sample) ~ "ref"
+    ) |> 
+    mutate(condition = if_else(is.na(condition), "rect", condition))
   )
 ```
 
