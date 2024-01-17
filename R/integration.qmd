@@ -5,6 +5,23 @@ editor: visual
 ---
 
 ```{r}
+library(Seurat)
+library(clustree)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(stringr)
+
+# visualization config
+options(bitmapType="cairo")
+
+set.seed(1)
+
+```
+
+
+```{r}
 retina.scrna <- readRDS("../data/retina.preprocessed_ASL1.rds")
 
 retina.scrna@meta.data <- retina.scrna@meta.data |> 
