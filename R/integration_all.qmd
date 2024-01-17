@@ -1,11 +1,11 @@
 ---
-title: "integration"
+title: "integration_all"
 format: html
 editor: visual
 ---
 
 ```{r}
-retina.scrna <- readRDS("../data/retina.preprocessed_ASL1.rds")
+retina.scrna <- readRDS("../data/retina.preprocessed.rds")
 
 retina.scrna@meta.data <- retina.scrna@meta.data |> 
   mutate(
@@ -20,22 +20,9 @@ retina.scrna@meta.data <- retina.scrna@meta.data |>
 ```
 
 ```{r}
-retina.scrna <- SCTransform(
-  retina.scrna, vars.to.regress = c("percent.mt","diff_S_G2M","percent.W"), ncells = 3000, conserve.memory = TRUE, verbose = TRUE)
-```
-
-
-
-
-```{r}
-retina.scrna <- RunPCA(retina.scrna, features = VariableFeatures(object = retina.scrna))
-retina.scrna <- FindNeighbors(retina.scrna, dims=1:15)
-retina.scrna <- FindClusters(retina.scrna, resolution = c(0.2))
-retina.scrna <- RunUMAP(retina.scrna, dims = 1:15)
-
-
 DimPlot(retina.scrna, group.by = "condition")
 ```
+
 ```{r}
 DimPlot(retina.scrna, group.by = "SCT_snn_res.0.2")
 ```
@@ -67,6 +54,5 @@ DimPlot(retina.scrna.combined, group.by = "SCT_snn_res.0.2")
 ```
 
 ```{r}
-saveRDS(retina.scrna.combined, "../data/retina.integrated.ASL1.rds")
+saveRDS(retina.scrna.combined, "../data/retina.integrated.all.rds")
 ```
-
