@@ -63,7 +63,7 @@ DimPlot(retina.scrna.combined, group.by = "condition")
 ```
 
 ```{r}
-DimPlot(retina.scrna.combined, group.by = "SCT_snn_res.0.2")
+DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.2")
 ```
 
 ```{r}
