@@ -57,7 +57,7 @@ Idents(retina.scrna) <- "integrated_snn_res.0.12"
 ## Find Conserved Markers
 
 ```{r}
-cluster_i <- "4"
+cluster_i <- "3"
 
 cluster.conserved_markers <- FindConservedMarkers(
   retina.scrna,
@@ -78,13 +78,13 @@ cluster.conserved_markers <- FindConservedMarkers(
 # fiber: WNT5N, JARID2, and ST6GALNAC3
 retina.scrna <- RenameIdents(
   object = retina.scrna,
-  "0" = "epithelial",
-  "1" = "fiber",
-  "2" = "intermediate",
-  "3" = "fiber",
-  "4" = "intermediate"
+  "0" = "intermediate",
+  "1" = "epithelial",
+  "2" = "fiber",
+  "3" = "unknown"
 )
 retina.scrna[["cell_type"]] <- Idents(retina.scrna)
+retina.scrna <- subset(retina.scrna, cell_type != "unknown")
 
 DimPlot(retina.scrna, group.by = "cell_type")
 ```
@@ -113,7 +113,7 @@ knn.mat <- knn_simMat(
 # get count matrix
 retina.scrna.sub$id <- paste0(
   retina.scrna.sub$condition, "_", retina.scrna.sub$sample)
-count.mat <- table(retina.scrna.sub$sample, retina.scrna.sub$cell_type)
+count.mat <- table(retina.scrna.sub$id, retina.scrna.sub$cell_type)[, 1:3]
 ```
 
 ## Run DCATS and fit Model
@@ -121,8 +121,8 @@ count.mat <- table(retina.scrna.sub$sample, retina.scrna.sub$cell_type)
 ```{r}
 # create design matrix
 retina.cell_type.design <- data.frame(
-  status = c("1_ret", "1_ret", "0_heal", "1_ret", "0_heal"),
-  condition = c("0_none", "1_fgf", "0_none", "1_fgf", "0_none")
+  status = c(rep("rect", 3), rep("health", 2)),
+  condition = c(rep("stim", 2), rep("none", 3))
 )
 
 # fit model
@@ -245,7 +245,6 @@ rld <- assay(rlog(retina.dds, blind=TRUE)) |>
 pheatmap(rld, annotation = col_data)
 ```
 
-
 # 4. Gene Set Enrichment Analysis
 
 ## Get the Gene Ontology
@@ -276,7 +275,7 @@ chicken.pathways <- gmtPathways("../_raw/genesets_chicken.gmt")
 library(org.Gg.eg.db)
 entrez <- AnnotationDbi::select(
   org.Gg.eg.db,
-  key=dds.results$gene,
+  key=dds.results.rect_fgf$gene,
   columns="ENTREZID",
   keytype="SYMBOL"
 ) |> 
