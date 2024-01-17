@@ -79,7 +79,7 @@ DimPlot(retina.scrna.combined, group.by = "condition")
 ```
 
 ```{r}
-DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.15")
+DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.105")
 ```
 
 ```{r}
@@ -87,5 +87,140 @@ DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.2")
 ```
 
 ```{r}
-saveRDS(retina.scrna.combined, "../data/retina.integrated.ASL1.rds")
+SCT_assay <- GetAssayData(retina.scrna, assay = "SCT", slot = "data")
+retina.scrna.combined[["SCT"]] <- CreateAssayObject(data = SCT_assay)
+```
+```{r}
+DefaultAssay(retina.scrna.combined) <- "SCT"
+Idents(retina.scrna.combined) <- "integrated_snn_res.0.105"
+DimPlot(retina.scrna.combined, group.by = "integrated_snn_res.0.105")
+```
+
+## Find markers for cluster 0
+
+```{r}
+cluster_i <- "0"
+
+cluster.conserved_markers <- FindConservedMarkers(
+  retina.scrna.combined,
+  ident.1 = cluster_i,
+  assay = "SCT",
+  grouping.var = "condition",
+  only.pos = TRUE,
+  min.pct = 0.25,
+  min.diff.pct = 0.25,
+  logfc.threshold = 0.25
+)
+
+markers_0 <- rownames(cluster.conserved_markers)[1:4]
+
+FeaturePlot(retina.scrna.combined, 
+            reduction = "umap", 
+            features = markers_0,
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+```
+
+## Find markers for cluster 1
+
+```{r}
+cluster_i <- "1"
+
+cluster.conserved_markers <- FindConservedMarkers(
+  retina.scrna.combined,
+  ident.1 = cluster_i,
+  assay = "SCT",
+  grouping.var = "condition",
+  only.pos = TRUE,
+  min.pct = 0.25,
+  min.diff.pct = 0.25,
+  logfc.threshold = 0.25
+)
+
+markers_1 <- rownames(cluster.conserved_markers)[1:4]
+
+FeaturePlot(retina.scrna.combined, 
+            reduction = "umap", 
+            features = markers_1,
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+```
+
+```{r}
+## Find markers for cluster 2
+
+cluster_i <- "2"
+
+cluster.conserved_markers <- FindConservedMarkers(
+  retina.scrna.combined,
+  ident.1 = cluster_i,
+  assay = "SCT",
+  grouping.var = "condition",
+  only.pos = TRUE,
+  min.pct = 0.25,
+  min.diff.pct = 0.25,
+  logfc.threshold = 0.25
+)
+
+markers_2 <- rownames(cluster.conserved_markers)[1:4]
+
+FeaturePlot(retina.scrna.combined, 
+            reduction = "umap", 
+            features = markers_2,
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+
+```
+
+## Find markers for cluster 3
+
+```{r}
+cluster_i <- "3"
+
+cluster.conserved_markers <- FindConservedMarkers(
+  retina.scrna.combined,
+  ident.1 = cluster_i,
+  assay = "SCT",
+  grouping.var = "condition",
+  only.pos = TRUE,
+  min.pct = 0.25,
+  min.diff.pct = 0.25,
+  logfc.threshold = 0.25
+)
+
+markers_3 <- rownames(cluster.conserved_markers)[1:4]
+
+FeaturePlot(retina.scrna.combined, 
+            reduction = "umap", 
+            features = markers_3,
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+```
+
+## Cell type assignment
+
+```{r}
+retina.scrna.combined <- RenameIdents(
+  object = retina.scrna.combined,
+  "0" = "epithelial",
+  "1" = "intermediate",
+  "2" = "fiber",
+  "3" = "intermediate"
+)
+retina.scrna.combined[["cell_type"]] <- Idents(retina.scrna.combined)
+
+DimPlot(retina.scrna.combined, group.by = "cell_type")
+```
+
+
+```{r}
+saveRDS(retina.scrna.combined, "../data/retina.integrated_annotated.ASL1.rds")
 ```
