@@ -7,9 +7,18 @@ editor: visual
 ## Load Dependencies
 
 ```{r}
+library(Seurat)
+library(scDblFinder)
+library(clustree)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
 
 # visualization config
 options(bitmapType="cairo")
+
+seed(1)
 ```
 
 ```{r}
@@ -96,6 +105,7 @@ boxplot(
 # Doublet Removal
 
 ```{r}
+library(scDblFinder)
 sce <- as.SingleCellExperiment(retina.scrna.filtered)
 dbl.dens <- computeDoubletDensity(sce)
 dbl.calls <- doubletThresholding(
@@ -140,6 +150,8 @@ true_false <- g2m.genes %in% rownames(retina.scrna)
 g2m.genes_filt <- g2m.genes[true_false]
 
 # normalize first to create 'data' layer
+plan("sequential")
+
 retina.scrna.no_dbl <- NormalizeData(
   retina.scrna.no_dbl,
   normalization.method = "LogNormalize",
@@ -166,6 +178,10 @@ retina.scrna.no_dbl$diff_S_G2M <- retina.scrna.no_dbl$S.Score - retina.scrna.no_
 ```
 
 ```{r}
+library(future)
+plan("multisession", workers = 8)
+options(future.globals.maxSize = 8000 * 1024^2)
+
 retina.scrna.no_dbl <- SCTransform(
   retina.scrna.no_dbl,
   vars.to.regress = c("percent.mt", "diff_S_G2M", "percent.W"),
@@ -173,6 +189,8 @@ retina.scrna.no_dbl <- SCTransform(
   conserve.memory = TRUE,
   verbose = TRUE
 )
+
+plan("sequential")
 ```
 
 # PCA
@@ -221,10 +239,15 @@ FeaturePlot(
 
 ```{r}
 saveRDS(retina.scrna.no_dbl, "../data/retina.preprocessed.rds")
+
+
+retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, subset = seurat_clusters == 7)
 ```
 
 ```{r}
-retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, subset = idents == "6")
+# check which cluster it is, since due to some randomness, the number might be
+# different
+retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, idents = "7")
 ```
 
 ```{r}

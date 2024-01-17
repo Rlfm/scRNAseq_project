@@ -1,0 +1,88 @@
+---
+title: "snATAC preprocessing"
+format: html
+editor: visual
+---
+
+# Directories 
+```{r}
+working_dir <- getwd()
+
+raw_data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("_raw", sep = "/")
+
+data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("data", sep = "/")
+
+```
+
+# Load datasets
+```{r}
+library(Signac)
+
+snRNA_object <- readRDS("../data/retina.preprocessed.rds")
+snATAC_object <- readRDS("../data/snATAC_retina_preprocessed.rds")
+
+snRNA_object@meta.data 
+snATAC_object@meta.data
+```
+
+# Find anchors 
+```{r}
+
+library(future)
+plan("multisession", workers = 16)
+options(future.globals.maxSize = 8000 * 1024^2)
+
+transfer.anchors <- FindTransferAnchors(reference = snRNA_object, query = snATAC_object, features = VariableFeatures(object = snRNA_object), reference.assay = "SCT", query.assay = "ACTIVITY", reduction = "cca",normalization.method ="SCT")
+
+plan("sequential")
+```
+
+# CoEmbding datasets
+```{r}
+# note that we restrict the imputation to variable genes from scRNA-seq, but could impute the
+# full transcriptome if we wanted to
+
+
+genes.use <- VariableFeatures(snRNA_object)
+refdata <- GetAssayData(snRNA_object, assay = "SCT", slot = "data")[genes.use, ]
+
+# refdata (input) contains a scRNA-seq expression matrix for the scRNA-seq cells.  imputation
+# (output) will contain an imputed scRNA-seq matrix for each of the ATAC cells
+imputation <- TransferData(anchorset = transfer.anchors, refdata = refdata, weight.reduction = snATAC_object[["lsi"]],
+    dims = 2:30)
+
+snATAC_object[["SCT"]] <- imputation
+
+snRNA_object$orig.ident <- "RNA"
+snATAC_object$orig.ident <- "ATAC"
+
+coembed <- merge(x = snRNA_object, y = snATAC_object)
+coembed@meta.data
+
+# Finally, we run PCA and UMAP on this combined object, to visualize the co-embedding of both
+# datasets
+
+coembed <- ScaleData(coembed, do.scale = FALSE)
+coembed <- RunPCA(coembed, features = genes.use, verbose = TRUE)
+coembed <- RunUMAP(coembed, dims = 1:30)
+coembed@meta.data
+
+#test <- subset(coembed, subset= nCount_RNA != NA  & nCount_peaks != NA)
+
+p1 <- DimPlot(coembed, group.by = "orig.ident")
+p2 <- DimPlot(coembed, split.by = "orig.ident",group.by = "orig.ident")
+p3 <- FeaturePlot(coembed, "ASL1",order=TRUE,label=TRUE)
+
+p1 +p2 + p3
+
+
+```
+
+# Save RDS
+```{r}
+saveRDS(coembed, "../data/retina.multimodal.integrated.rds")
+```
