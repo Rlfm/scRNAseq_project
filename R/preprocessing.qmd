@@ -7,7 +7,6 @@ editor: visual
 ## Load Dependencies
 
 ```{r}
-
 library(Seurat)
 library(scDblFinder)
 library(clustree)
@@ -18,6 +17,8 @@ library(ggplot2)
 
 # visualization config
 options(bitmapType="cairo")
+
+seed(1)
 ```
 
 ```{r}
