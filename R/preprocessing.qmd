@@ -7,6 +7,15 @@ editor: visual
 ## Load Dependencies
 
 ```{r}
+
+library(Seurat)
+library(scDblFinder)
+library(clustree)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
 # visualization config
 options(bitmapType="cairo")
 ```
@@ -230,7 +239,17 @@ FeaturePlot(
 ```{r}
 saveRDS(retina.scrna.no_dbl, "../data/retina.preprocessed.rds")
 
+
 retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, subset = seurat_clusters == 7)
+```
+
+```{r}
+# check which cluster it is, since due to some randomness, the number might be
+# different
+retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, idents = "7")
+```
+
+```{r}
 saveRDS(retina.scrna.no_dbl_ASL1, "../data/retina.preprocessed_ASL1.rds")
 ```
 

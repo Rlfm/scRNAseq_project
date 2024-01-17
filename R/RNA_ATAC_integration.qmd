@@ -81,8 +81,8 @@ p1 +p2 + p3
 
 
 ```
+
 # Save RDS
 ```{r}
 saveRDS(coembed, "../data/retina.multimodal.integrated.rds")
-
 ```
