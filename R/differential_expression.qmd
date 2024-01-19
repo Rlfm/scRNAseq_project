@@ -24,6 +24,9 @@ library(pheatmap)
 
 # visualization config
 options(bitmapType="cairo")
+
+source("plot_style.R")
+set_plot_theme()
 ```
 
 
@@ -90,14 +93,84 @@ DimPlot(retina.scrna, group.by = "cell_type")
 ```
 
 ```{r}
-saveRDS(retina.scrna, "../data/retina.cell_assigned.ASL1.rds")
+#saveRDS(retina.scrna, "../data/retina.cell_assigned.ASL1.rds")
 ```
-
 
 ## Subset to Only Compare Cells at 0 and 6 h
 
 ```{r}
+#retina.scrna.sub <- retina.scrna
 retina.scrna.sub <- subset(retina.scrna, timepoint %in% c("0h", "6h"))
+```
+
+## Process Again
+
+```{r}
+retina.scrna.sub <- SCTransform(
+  retina.scrna.sub,
+  vars.to.regress = c("percent.mt", "diff_S_G2M", "percent.W"),
+  conserve.memory = TRUE,
+  verbose = TRUE
+)
+```
+
+```{r}
+retina.scrna.sub <- RunPCA(retina.scrna.sub)
+ElbowPlot(retina.scrna.sub)
+```
+```{r}
+retina.scrna.sub <- FindNeighbors(retina.scrna.sub, dims=1:15)
+retina.scrna.sub <- FindClusters(
+  retina.scrna.sub, resolution = c(0.1, 0.2, 0.5))
+
+clustree(retina.scrna.sub, prefix = "SCT_snn_res.")
+```
+```{r}
+retina.scrna.sub <- RunUMAP(retina.scrna.sub, dims = 1:15)
+```
+
+```{r}
+Idents(retina.scrna.sub) <- "SCT_snn_res.0.5"
+DimPlot(retina.scrna.sub, group.by = "SCT_snn_res.0.5")
+```
+
+
+```{r}
+cluster_i <- "5"
+
+cluster.conserved_markers <- FindConservedMarkers(
+  retina.scrna.sub,
+  ident.1 = cluster_i,
+  grouping.var = "sample",
+  only.pos = TRUE,
+  min.pct = 0.25,
+  min.diff.pct = 0.25,
+  logfc.threshold = 0.25
+)
+```
+```{r}
+# epithelial: SLC7A2 and BNC2
+# intermediate: RELN, MAST4, and KIF13A
+# fiber: WNT5N, JARID2, and ST6GALNAC3
+retina.scrna.sub <- RenameIdents(
+  object = retina.scrna.sub,
+  "0" = "epithelial",
+  "1" = "intermediate",
+  "2" = "fiber",
+  "3" = "fiber",
+  "4" = "fiber",
+  "5" = "fiber"
+)
+retina.scrna.sub[["cell_type"]] <- Idents(retina.scrna.sub)
+retina.scrna.sub <- subset(retina.scrna.sub, cell_type != "unknown")
+
+DimPlot(retina.scrna.sub, group.by = "cell_type")
+```
+
+```{r}
+retina.scrna.sub@meta.data |> 
+  group_by(cell_type, condition) |> 
+  count()
 ```
 
 
@@ -129,6 +202,52 @@ retina.cell_type.design <- data.frame(
 dcats.res <- dcats_GLM(count.mat, retina.cell_type.design, knn.mat)
 ```
 
+## Get Data into Format for Plotting and Plot Relative Abundances by Condition
+
+```{r}
+cell.abundances <- count.mat |> 
+  as.data.frame() |> 
+  rename(sample = Var1, cell_type = Var2) |> 
+  mutate(condition = case_when(
+    grepl("fgf", sample) ~ "Retinectomy + FGF",
+    grepl("rect", sample) ~ "Retinectomy",
+    grepl("ref", sample) ~ "Reference"
+  )) |> 
+  group_by(cell_type, condition) |> 
+  summarise(abundance = mean(Freq)) |> 
+  ungroup() |> 
+  rename(
+    Condition = condition,
+    Composition = abundance
+  ) |> 
+  mutate(
+    cell_type = str_to_title(cell_type),
+    cell_type.order = case_when(
+      cell_type == "Epithelial" ~ 3,
+      cell_type == "Intermediate" ~ 2,
+      cell_type == "Fiber" ~ 1
+    )
+  )
+```
+```{r}
+cell_type.colors = c(
+  "Epithelial" = "#E04226",
+  "Intermediate" = "#2FA7E0",
+  "Fiber" = "#138F65"
+)
+
+composition.plot <- cell.abundances |> 
+  ggplot(aes(x = Condition, y = Composition, fill = reorder(cell_type, cell_type.order))) +
+  geom_bar(position = "fill", stat = "identity") +
+  labs(fill = "Cell Type") +
+  scale_fill_manual(values = cell_type.colors) +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    aspect.ratio=1/0.7
+  )
+composition.plot
+```
 
 # 3. Differential Gene Expression
 
@@ -163,7 +282,9 @@ col_data <- col_data |>
       samples == "E46hFGF" ~ "rect_fgf",
       samples == "E4RPE" ~ "ref",
       samples == "E56hFGF" ~ "rect_fgf",
-      samples == "E5RPE" ~ "ref"
+      samples == "E5RPE" ~ "ref",
+      samples == "E424hFGF" ~ "rect_fgf",
+      samples == "E524hFGF" ~ "rect_fgf"
     )
   ) |> 
   column_to_rownames(var = "samples")
@@ -242,8 +363,24 @@ rld <- assay(rlog(retina.dds, blind=TRUE)) |>
 ```
 
 ```{r}
-pheatmap(rld, annotation = col_data)
+sig_gene.heatmap <- pheatmap(
+  rld,
+  annotation_col = col_data |> 
+    mutate(condition = case_when(
+      condition == "rect_none" ~ "Retinectomy",
+      condition == "rect_fgf" ~ "Retinectomy + FGF",
+      condition == "ref" ~ "Reference"
+    )) |> 
+    rename("Condition" = condition),
+  main = "Differentially Expressed Genes between \n Reference, Retinectomy, and FGF-Treatment",
+  annotation_names_col = FALSE
+)
+ggsave("../data/dge.sig.fiber.png")
 ```
+```{r}
+
+```
+
 
 # 4. Gene Set Enrichment Analysis
 
@@ -275,7 +412,7 @@ chicken.pathways <- gmtPathways("../_raw/genesets_chicken.gmt")
 library(org.Gg.eg.db)
 entrez <- AnnotationDbi::select(
   org.Gg.eg.db,
-  key=dds.results.rect_fgf$gene,
+  key=dds.res.sig.rect_fgf$gene,
   columns="ENTREZID",
   keytype="SYMBOL"
 ) |> 
