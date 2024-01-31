@@ -4,7 +4,8 @@ format: html
 editor: visual
 ---
 
-# Directories 
+# Directories
+
 ```{r}
 working_dir <- getwd()
 
@@ -18,15 +19,16 @@ data_dir <- working_dir |>
 
 ```
 
-#Download gff3 Database 
+#Download gff3 Database
+
 ```{r}
 Db_path <- paste(raw_data_dir, "/", "Gallus_gallus.bGalGal1.mat.broiler.GRCg7b.111.gff3.gz", sep = "")
 url = "ftp://ftp.ensembl.org/pub/release-111/gff3/gallus_gallus/Gallus_gallus.bGalGal1.mat.broiler.GRCg7b.111.gff3.gz"
 download.file(url, Db_path)
 ```
 
-
 # Load snATAC
+
 ```{r}
 library(Signac)
 
@@ -51,6 +53,7 @@ snATAC_object@meta.data
 ```
 
 # Preprocessing snATAC
+
 ```{r}
 #nuclei were retained which contained less than 40000 ATAC counts, greater than 1000 ATAC counts, 
 #nucleosomal signal less than 2, and TSS enrichment greater than 1."""
@@ -62,6 +65,7 @@ snATAC_object <- subset(snATAC_object, subset = nCount_peaks > 1000 & nCount_pea
 ```
 
 #Normalization and vizualisation
+
 ```{r}
 
 snATAC_object <- RunTFIDF(snATAC_object)
@@ -70,11 +74,17 @@ snATAC_object <- RunSVD(snATAC_object)
 
 snATAC_object <- RunUMAP(snATAC_object, reduction = "lsi", dims = 2:50, reduction.name = "umap.atac", reduction.key = "atacUMAP_")
 
-DimPlot(snATAC_object, label = TRUE) + NoLegend() + ggtitle("ATAC")
+p1 <- DimPlot(snATAC_object, label = TRUE) + NoLegend() + ggtitle("ATAC")
+p1
+
+jpeg(filename=paste(data_dir, "/preprocessing_snATAC_p1.jpeg", sep = ""))
+plot(p1)
+dev.off()
 
 ```
 
 #Create the gene activity matrix and add it to seurat object
+
 ```{r}
 
 source("Custom_GreateGeneActivityMatrix.R")
@@ -92,12 +102,17 @@ DefaultAssay(snATAC_object) <- "ACTIVITY"
 snATAC_object <- NormalizeData(snATAC_object)
 snATAC_object <- ScaleData(snATAC_object, features = rownames(snATAC_object))
 
-FeaturePlot(snATAC_object,"ASL1")
+p2 <- FeaturePlot(snATAC_object,"ASL1")
+
+jpeg(filename=paste(data_dir, "/preprocessing_snATAC_p2.jpeg", sep = ""))
+plot(p2)
+dev.off()
+
 ```
 
 #Saving preprocessed snATAC file
+
 ```{r}
 saveRDS(snATAC_object, paste(data_dir, "snATAC_retina_preprocessed.rds", sep = "/"))
 
 ```
-

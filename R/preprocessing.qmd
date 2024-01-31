@@ -4,7 +4,7 @@ format: html
 editor: visual
 ---
 
-## Load Dependencies
+# Load Dependencies
 
 ```{r}
 library(Seurat)
@@ -18,9 +18,22 @@ library(ggplot2)
 # visualization config
 options(bitmapType="cairo")
 
-seed(1)
+set.seed(1)
 ```
 
+# Directories 
+```{r}
+working_dir <- getwd()
+
+raw_data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("_raw", sep = "/")
+
+data_dir <- working_dir |>
+  substr(1, nchar(working_dir)-2) |>
+  paste("data", sep = "/")
+
+```
 ```{r}
 retina.scrna <- readRDS("../data/retina.rds")
 ```
@@ -37,14 +50,20 @@ retina.scrna[["percent.hb"]] <- PercentageFeatureSet(
 retina.scrna[["percent.rb"]] <- PercentageFeatureSet(
   retina.scrna, pattern = "^RP[SL]")
 
-VlnPlot(
+p1 <- VlnPlot(
   retina.scrna,
   features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.hb",
                "percent.rb"),
   ncol = 5
 )
+p1
 
-ggplot(
+jpeg(filename=paste(data_dir, "VlnPlot_unfiltered.jpeg", sep = "/"))
+plot(p1)
+dev.off()
+
+
+p2 <- ggplot(
   data.frame(retina.scrna@meta.data),
   aes(x = retina.scrna$nCount_RNA, y = retina.scrna$nFeature_RNA)
   ) +
@@ -55,6 +74,11 @@ ggplot(
     x = "No. of Counts",
     y = "No. of Genes"
   )
+p2
+
+jpeg(filename=paste(data_dir, "nCount_per_nFeature_unfiltered.jpeg", sep = "/"))
+plot(p2)
+dev.off()
 ```
 
 # Filtering
@@ -71,7 +95,7 @@ retina.scrna.filtered <- subset(
 
 #retina.scrna.filtered <- subset(retina.scrna, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10, nCount_RNA < 15000)
 
-ggplot(
+p3 <- ggplot(
   data.frame(retina.scrna.filtered@meta.data),
   aes(
     x = retina.scrna.filtered$nCount_RNA,
@@ -80,10 +104,15 @@ ggplot(
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
   labs(
-    title = "No. of Molecules detected per Gene (unfiltered)",
+    title = "No. of Molecules detected per Gene (filtered)",
     x = "No. of Counts",
     y = "No. of Genes"
   )
+p3
+
+jpeg(filename=paste(data_dir, "nCount_per_nFeature_filtered.jpeg", sep = "/"))
+plot(p3)
+dev.off()
 
 par(mar = c(4, 8, 2, 1))
 C <- retina.scrna.filtered@assays$RNA$counts
@@ -92,7 +121,7 @@ most_expressed <- order(apply(C, 1, median), decreasing = T)[20:1]
 
 selected_genes <- t(as.matrix(C[most_expressed, ]))
 
-boxplot(
+p4 <- boxplot(
   as.matrix(t(C[most_expressed, ])), 
   cex = 0.1,
   las = 1,
@@ -100,6 +129,11 @@ boxplot(
   col = (scales::hue_pal())(20)[20:1],
   horizontal = TRUE
 )
+p4 
+
+#jpeg(filename=paste(data_dir, "Boxplot_topGenes.jpeg", sep = "/"))
+#plot(p4)
+#dev.off()
 ```
 
 # Doublet Removal
@@ -178,9 +212,9 @@ retina.scrna.no_dbl$diff_S_G2M <- retina.scrna.no_dbl$S.Score - retina.scrna.no_
 ```
 
 ```{r}
-library(future)
-plan("multisession", workers = 8)
-options(future.globals.maxSize = 8000 * 1024^2)
+#library(future)
+#plan("multisession", workers = 8)
+#options(future.globals.maxSize = 8000 * 1024^2)
 
 retina.scrna.no_dbl <- SCTransform(
   retina.scrna.no_dbl,
@@ -190,7 +224,7 @@ retina.scrna.no_dbl <- SCTransform(
   verbose = TRUE
 )
 
-plan("sequential")
+#plan("sequential")
 ```
 
 # PCA
@@ -198,7 +232,11 @@ plan("sequential")
 ```{r}
 #Run PCA 
 retina.scrna.no_dbl <- RunPCA(retina.scrna.no_dbl)
-ElbowPlot(retina.scrna.no_dbl)
+p5 <- ElbowPlot(retina.scrna.no_dbl)
+p5
+jpeg(filename=paste(data_dir, "ElbowPlot_preprocessing.jpeg", sep = "/"))
+plot(p5)
+dev.off()
 ```
 
 # Unsupervised Clustering & Evaluation
@@ -207,7 +245,11 @@ ElbowPlot(retina.scrna.no_dbl)
 retina.scrna.no_dbl <- FindNeighbors(retina.scrna.no_dbl, dims=1:15)
 retina.scrna.no_dbl <- FindClusters(retina.scrna.no_dbl, resolution = c(0.1, 0.2, 0.5))
 
-clustree(retina.scrna.no_dbl, prefix = "SCT_snn_res.")
+p6 <- clustree(retina.scrna.no_dbl, prefix = "SCT_snn_res.")
+p6
+jpeg(filename=paste(data_dir, "Clustree_preprocessing.jpeg", sep = "/"))
+plot(p6)
+dev.off()
 ```
 
 # Dim. Reduction via UMAP
@@ -222,24 +264,33 @@ Idents(retina.scrna.no_dbl) <- "SCT_snn_res.0.2"
 ```
 
 ```{r}
-DimPlot(retina.scrna.no_dbl, group.by = "SCT_snn_res.0.2")
+p7 <- DimPlot(retina.scrna.no_dbl, group.by = "SCT_snn_res.0.2")
+p7
+
+jpeg(filename=paste(data_dir, "Unsupervised_clustering1_preprocessing.jpeg", sep = "/"))
+plot(p7)
+dev.off()
 ```
 
 ```{r}
 # visualize clusters expressing a nuclear marker
-FeaturePlot(
+p8 <- FeaturePlot(
   retina.scrna.no_dbl, 
   reduction = "umap", 
   features = "ASL1",
   label = TRUE
 ) 
+p8
+jpeg(filename=paste(data_dir, "Unsupervised_clustering1_ASL1_preprocessing.jpeg", sep = "/"))
+plot(p8)
+dev.off()
+
 ```
 
 # Save Results
 
 ```{r}
 saveRDS(retina.scrna.no_dbl, "../data/retina.preprocessed.rds")
-
 
 retina.scrna.no_dbl_ASL1 <- subset(retina.scrna.no_dbl, subset = seurat_clusters == 7)
 ```

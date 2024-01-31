@@ -25,19 +25,29 @@ library(Signac)
 snRNA_object <- readRDS("../data/retina.preprocessed.rds")
 snATAC_object <- readRDS("../data/snATAC_retina_preprocessed.rds")
 
-snRNA_object@meta.data 
-snATAC_object@meta.data
+snRNA_E46h_object <- subset(snRNA_object, subset = sample == "E46h")
+snRNA_E46hFGF_object <- subset(snRNA_object, subset = sample == "E46hFGF")
+
+snRNA_object_list <- list(snRNA_E46h_object,snRNA_E46hFGF_object)
+
+snATAC_object_list <- list()
+for(n in 1:length(snRNA_object_list)){
+  snATAC_object_list <- append(snATAC_object_list,snATAC_object)
+}
 ```
 
 # Find anchors 
 ```{r}
 
 library(future)
-plan("multisession", workers = 16)
+plan("multisession", workers = 8)
 options(future.globals.maxSize = 8000 * 1024^2)
 
-transfer.anchors <- FindTransferAnchors(reference = snRNA_object, query = snATAC_object, features = VariableFeatures(object = snRNA_object), reference.assay = "SCT", query.assay = "ACTIVITY", reduction = "cca",normalization.method ="SCT")
-
+transfer_anchors_list <- list()
+for(snRNA_object in snRNA_object_list){
+  transfer.anchors <- FindTransferAnchors(reference = snRNA_object, query = snATAC_object, features = VariableFeatures(object = snRNA_object), reference.assay = "SCT", query.assay = "ACTIVITY", reduction = "cca",normalization.method ="SCT")
+  transfer_anchors_list <- append(transfer_anchors_list,transfer.anchors)
+}
 plan("sequential")
 ```
 
@@ -46,43 +56,116 @@ plan("sequential")
 # note that we restrict the imputation to variable genes from scRNA-seq, but could impute the
 # full transcriptome if we wanted to
 
+coembed_object_list <- list()
 
-genes.use <- VariableFeatures(snRNA_object)
-refdata <- GetAssayData(snRNA_object, assay = "SCT", slot = "data")[genes.use, ]
+for(i in 1:length(snRNA_object_list)){
 
-# refdata (input) contains a scRNA-seq expression matrix for the scRNA-seq cells.  imputation
-# (output) will contain an imputed scRNA-seq matrix for each of the ATAC cells
-imputation <- TransferData(anchorset = transfer.anchors, refdata = refdata, weight.reduction = snATAC_object[["lsi"]],
+  snRNA_object <- snRNA_object_list[[i]]
+  transfer.anchors <- transfer_anchors_list[[i]]
+  snATAC_object <- snATAC_object_list[[i]]
+  
+  genes.use <- VariableFeatures(snRNA_object)
+  refdata <- GetAssayData(snRNA_object, assay = "SCT", slot = "data")[genes.use, ]
+  
+  # refdata (input) contains a scRNA-seq expression matrix for the scRNA-seq cells.  imputation
+  # (output) will contain an imputed scRNA-seq matrix for each of the ATAC cells
+  imputation <- TransferData(anchorset = transfer.anchors, refdata = refdata, weight.reduction = snATAC_object[["lsi"]],
     dims = 2:30)
+  
+  snATAC_object[["SCT"]] <- imputation
+  
+  snRNA_object$orig.ident <- "RNA"
+  snATAC_object$orig.ident <- "ATAC"
+  
+  coembed <- merge(x = snRNA_object, y = snATAC_object)
+  
+  # Finally, we run PCA and UMAP on this combined object, to visualize the co-embedding of both
+  # datasets
+  
+  coembed <- ScaleData(coembed, do.scale = FALSE)
+  coembed <- RunPCA(coembed, features = genes.use, verbose = TRUE)
+  coembed <- RunUMAP(coembed, dims = 1:30)
 
-snATAC_object[["SCT"]] <- imputation
-
-snRNA_object$orig.ident <- "RNA"
-snATAC_object$orig.ident <- "ATAC"
-
-coembed <- merge(x = snRNA_object, y = snATAC_object)
-coembed@meta.data
-
-# Finally, we run PCA and UMAP on this combined object, to visualize the co-embedding of both
-# datasets
-
-coembed <- ScaleData(coembed, do.scale = FALSE)
-coembed <- RunPCA(coembed, features = genes.use, verbose = TRUE)
-coembed <- RunUMAP(coembed, dims = 1:30)
-coembed@meta.data
-
-#test <- subset(coembed, subset= nCount_RNA != NA  & nCount_peaks != NA)
-
-p1 <- DimPlot(coembed, group.by = "orig.ident")
-p2 <- DimPlot(coembed, split.by = "orig.ident",group.by = "orig.ident")
-p3 <- FeaturePlot(coembed, "ASL1",order=TRUE,label=TRUE)
-
-p1 +p2 + p3
-
-
+  coembed_object_list <- append(coembed_object_list,coembed)
+  
+  p1 <- DimPlot(coembed, group.by = "orig.ident")
+  p2 <- DimPlot(coembed, split.by = "orig.ident",label=FALSE)
+  p3 <- FeaturePlot(coembed, "ASL1",order=TRUE)
+  
+  p1 + p2
+  p3
+  
+  #Saving Plots
+  jpeg(filename=paste(data_dir, "/Integration_coembed_plot1_",coembed$sample[[1]],".jpeg", sep = ""))
+  plot(p1)
+  dev.off()
+  
+  jpeg(filename=paste(data_dir, "/Integration_coembed_plot2_",coembed$sample[[1]],".jpeg", sep = ""))
+  plot(p2)
+  dev.off()
+  
+  jpeg(filename=paste(data_dir, "/Integration_coembed_plot3_",coembed$sample[[1]],".jpeg", sep = ""))
+  plot(p3)
+  dev.off()
+  }
+  
+  
 ```
-
-# Save RDS
+  
+#Clustering integrated dataset
 ```{r}
-saveRDS(coembed, "../data/retina.multimodal.integrated.rds")
+
+for(coembed in coembed_object_list){
+  
+  coembed <- FindNeighbors(coembed, reduction = "pca", dims = 1:30)
+  ## Computing nearest neighbor graph
+  ## Computing SNN
+  coembed <- FindClusters(coembed, resolution = 0.2, verbose = TRUE)
+  
+  #cols <- ArchR::paletteDiscrete(coembed@meta.data[, "RNA_snn_res.0.9"])
+  
+  p4 <- DimPlot(coembed, group.by = "SCT_snn_res.0.2", label = TRUE,) +
+  xlab("UMAP1") + ylab("UMAP2")
+  
+  p4
+  
+  p5 <- FeaturePlot(coembed,"ASL1",label=TRUE)
+  p5
+  
+  jpeg(filename=paste(data_dir, "/Integration_coembed_cluster_plot4_",coembed$sample[[1]],".jpeg", sep = ""))
+  plot(p4)
+  dev.off()
+
+  jpeg(filename=paste(data_dir, "/Integration_coembed_cluster_plot5_",coembed$sample[[1]],".jpeg", sep = ""))
+  plot(p5)
+  dev.off()
+  
+  # Subclustering + preprocessing
+  
+  multimodal_cluster89 <- subset(coembed,subset = SCT_snn_res.0.2 == 7 |SCT_snn_res.0.2 == 9)
+  
+  multimodal_cluster89 <- ScaleData(multimodal_cluster89, do.scale = FALSE)
+  multimodal_cluster89 <- RunPCA(multimodal_cluster89, features = genes.use, verbose = TRUE)
+  multimodal_cluster89 <- RunUMAP(multimodal_cluster89, dims = 1:30)
+  multimodal_cluster89 <- FindNeighbors(multimodal_cluster89, reduction = "pca", dims = 1:30)
+  multimodal_cluster89 <- FindClusters(multimodal_cluster89, resolution = 0.2, verbose = TRUE)
+  
+  p6 <- DimPlot(multimodal_cluster89, group.by = "SCT_snn_res.0.2", label = TRUE,) +
+      xlab("UMAP1") + ylab("UMAP2")
+      
+  p6
+  
+  jpeg(filename=paste(data_dir, "/Integration_coembed_clusterASL1_plot_",coembed$sample[[1]],".jpeg", sep = ""))
+  plot(p5)
+  dev.off()
+  
+  #FeaturePlot(multimodal_cluster89,"ASL1",label=TRUE)
+  
+  # Save RDS
+  filepath = paste("../data/retina.multimodal.ASL1.integrated_",coembed$sample[[1]],".rds",sep="")
+  saveRDS(multimodal_cluster89,filepath)
+
+}
+
 ```
+
